@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; // 💡 추가
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 export default function AdminDashboard() {
+  const router = useRouter(); // 💡 라우터 추가
   const [keyword, setKeyword] = useState("");
   const [title, setTitle] = useState("");
   const [contentType, setContentType] = useState<"short" | "long">("short");
@@ -16,7 +18,6 @@ export default function AdminDashboard() {
     if (!keyword) return alert("키워드를 입력해주세요.");
     setLoading(true);
     try {
-      // 💡 API로 contentType 파라미터를 함께 넘겨 프롬프트를 다르게 적용해야 합니다.
       const res = await fetch("/api/admin/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,7 +50,7 @@ export default function AdminDashboard() {
       await addDoc(collection(db, "posts"), {
         title,
         keyword,
-        type: contentType, // 💡 발행 시 콘텐츠 타입(short/long)도 함께 저장
+        type: contentType,
         contents: results,
         createdAt: serverTimestamp(),
       });
@@ -64,6 +65,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
+      {/* 💡 홈으로 돌아가기 버튼 영역 추가 */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-black text-slate-100">콘텐츠 생성 스튜디오</h2>
+        <button 
+          onClick={() => router.push("/")}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-lg transition"
+        >
+          <span>🏠</span> 홈으로 돌아가기
+        </button>
+      </div>
+
       <div className="flex flex-col gap-4 mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
         
         {/* 콘텐츠 타입 선택 토글 */}
@@ -72,13 +84,13 @@ export default function AdminDashboard() {
             onClick={() => setContentType("short")}
             className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${contentType === "short" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"}`}
           >
-            ⚡ 쇼츠 대본용 (초고속 정독)
+            ⚡ 쇼츠 대본용
           </button>
           <button 
             onClick={() => setContentType("long")}
             className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${contentType === "long" ? "bg-emerald-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"}`}
           >
-            📚 아티클용 (심층 분석 리포트)
+            📚 아티클용
           </button>
         </div>
 

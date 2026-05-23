@@ -1,37 +1,65 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
-export default async function PostDetail({ params }: { params: { id: string } }) {
-  // URL 파라미터로 넘어온 글 ID(params.id)로 Firebase에서 문서 조회
-  const docRef = doc(db, "posts", params.id);
-  const docSnap = await getDoc(docRef);
+export default function PostDetail({ params }: { params: { id: string } }) {
+  const [post, setPost] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedMBTI, setSelectedMBTI] = useState<string>("ALL"); // 💡 초기값 ALL
 
-  // 문서가 삭제되었거나 잘못된 주소일 경우
-  if (!docSnap.exists()) {
-    return (
-      <div className="text-center mt-32 text-gray-500">
-        <h2 className="text-2xl font-bold mb-2">글을 찾을 수 없습니다 😢</h2>
-        <p>삭제되었거나 존재하지 않는 게시물입니다.</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    async function fetchPost() {
+      const docRef = doc(db, "posts", params.id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setPost(docSnap.data());
+      }
+      setLoading(false);
+    }
+    fetchPost();
+  }, [params.id]);
 
-  const post = docSnap.data();
+  if (loading) return <div className="text-center mt-32">로딩 중...</div>;
+  if (!post) return <div className="text-center mt-32 text-gray-500">글을 찾을 수 없습니다 😢</div>;
+
+  // 💡 선택된 MBTI에 따른 필터링 로직
+  const filteredContents = selectedMBTI === "ALL" 
+    ? post.contents 
+    : post.contents.filter((item: any) => item.mbti === selectedMBTI);
 
   return (
     <article className="max-w-2xl mx-auto p-6 mt-8">
       <h1 className="text-3xl font-extrabold mb-8 text-gray-900 leading-tight">
         {post.title}
       </h1>
+
+      {/* 💡 MBTI 선택 버튼 그룹 */}
+      <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 py-4 mb-8 border-b border-gray-100 flex flex-wrap gap-2">
+        <button 
+          onClick={() => setSelectedMBTI("ALL")}
+          className={`px-4 py-2 rounded-full font-bold text-sm transition ${selectedMBTI === "ALL" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+        >
+          전체 보기
+        </button>
+        {post.contents?.map((item: any) => (
+          <button 
+            key={item.mbti}
+            onClick={() => setSelectedMBTI(item.mbti)}
+            className={`px-4 py-2 rounded-full font-bold text-sm transition ${selectedMBTI === item.mbti ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
+          >
+            {item.mbti}
+          </button>
+        ))}
+      </div>
       
-      {/* 상단 애드센스 광고 영역 */}
       <div className="w-full h-24 bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mb-10 rounded-lg text-sm">
         Google AdSense (상단 배너)
       </div>
 
       <div className="prose prose-blue max-w-none space-y-12">
-        {/* DB에 저장된 16개의 MBTI 배열을 순회하며 렌더링 */}
-        {post.contents?.map((item: any, index: number) => (
+        {filteredContents?.map((item: any, index: number) => (
           <section key={index} className="border-b border-gray-100 pb-10 last:border-0">
             <h2 className="text-2xl font-bold text-blue-600 mb-4 flex items-center gap-2">
               <span className="text-3xl">✨</span> {item.mbti}
@@ -43,7 +71,6 @@ export default async function PostDetail({ params }: { params: { id: string } })
         ))}
       </div>
 
-      {/* 하단 애드센스 광고 영역 */}
       <div className="w-full h-24 bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mt-16 mb-20 rounded-lg text-sm">
         Google AdSense (하단 배너)
       </div>
