@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateMbtiScripts } from "@/lib/gemini";
+import { generateMbtiScripts } from "../../../../lib/gemini";
 
 export async function POST(request: Request) {
   try {

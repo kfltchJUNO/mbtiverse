@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MbtiContent } from "@/lib/gemini";
+import { MbtiContent } from "../../lib/gemini";
 
 export default function AdminDashboard() {
   const [keyword, setKeyword] = useState("");
