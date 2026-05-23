@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script"; // 💡 Script 임포트 추가
 // @ts-ignore
 import "./globals.css";
 
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
     siteName: "MBTIverse",
     locale: "ko_KR",
     type: "website",
-    // 💡 JPG 포맷을 인식할 수 있도록 메타데이터에 강제 주입합니다.
     images: [
       {
         url: "/opengraph-image.jpg",
@@ -33,6 +33,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        {/* 💡 구글 애드센스 스크립트 추가 */}
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4585319125929329"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   );

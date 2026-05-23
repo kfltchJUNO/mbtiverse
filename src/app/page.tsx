@@ -13,9 +13,15 @@ export default function Home() {
   const { user, loading: loadingAuth, isAdmin, loginWithGoogle, logout, isInAppBrowser } = useAuthGuard();
 
   useEffect(() => {
+    // 💡 애드센스 광고 초기화: 페이지 로드 시 광고 스크립트 실행
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      console.error("AdSense push error:", e);
+    }
+
     async function fetchPosts() {
       try {
-        // 애드센스는 최신 글이 주기적으로 올라오는 것을 좋아합니다.
         const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(6));
         const snapshot = await getDocs(q);
         const fetched = snapshot.docs.map((doc) => ({
@@ -34,7 +40,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
-      {/* 1. 상단 히어로 섹션 (명확한 사이트 정체성 부여) */}
+      {/* 1. 상단 히어로 섹션 */}
       <section className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 text-white py-16 px-6 text-center shadow-lg relative overflow-hidden">
         <div className="max-w-3xl mx-auto relative z-10">
           <span className="bg-white/20 text-white text-xs font-bold px-4 py-1.5 rounded-full backdrop-blur-md border border-white/30 shadow-sm">
@@ -53,10 +59,8 @@ export default function Home() {
       {/* 2. 메인 콘텐츠 레이아웃 */}
       <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1 w-full">
         
-        {/* 왼쪽: 메인 콘텐츠 (텍스트가 풍부한 영역으로 구글 봇이 좋아함) */}
+        {/* 왼쪽: 메인 콘텐츠 */}
         <div className="lg:col-span-3 space-y-10">
-          
-          {/* 사이트 소개 텍스트 (애드센스 승인을 위한 필수 텍스트 볼륨 확보) */}
           <section className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
             <h2 className="text-2xl font-black text-slate-800 mb-4">MBTIverse 소개</h2>
             <p className="text-slate-600 leading-relaxed break-keep">
@@ -66,7 +70,6 @@ export default function Home() {
             </p>
           </section>
 
-          {/* 최신 콘텐츠 피드 */}
           <section>
             <div className="flex gap-2 border-b border-slate-200 pb-3 text-sm font-bold text-slate-400 mb-6">
               <span className="text-indigo-600 border-b-2 border-indigo-600 pb-3 px-1">🔥 최신 MBTI 분석 리포트</span>
@@ -107,16 +110,14 @@ export default function Home() {
           </section>
         </div>
 
-        {/* 오른쪽: 사이드바 (로그인, 테스트, 광고) */}
+        {/* 오른쪽: 사이드바 */}
         <aside className="lg:col-span-1 space-y-6">
-          
           {isInAppBrowser && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
               ⚠️ 인앱 브라우저에서는 로그인이 제한될 수 있습니다. <b>다른 브라우저로 열기</b>를 권장합니다.
             </div>
           )}
 
-          {/* 인증 영역 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <h3 className="font-black text-slate-800 mb-4">👤 내 계정</h3>
             {loadingAuth ? (
@@ -138,51 +139,32 @@ export default function Home() {
             )}
           </div>
 
-          {/* 테스트 링크 영역 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
             <h3 className="font-black text-slate-800 mb-4">🚀 심리 테스트</h3>
-            <Link href="/test/fruit" className="block w-full p-4 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition">
-              🍎 성격 과일 테스트
-            </Link>
-            <Link href="/test/future-item" className="block w-full p-4 bg-pink-50 text-pink-700 rounded-xl font-bold text-sm hover:bg-pink-100 transition">
-              🚀 미래 인생템 테스트
-            </Link>
-            
-            {user && !isAdmin && (
-              <Link href="/my-history" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">
-                📚 내 테스트 기록 보기
-              </Link>
-            )}
-
-            {isAdmin && (
-              <Link href="/scripts" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">
-                🎧 대본 아카이브 (Admin)
-              </Link>
-            )}
-
-            {isAdmin && (
-              <Link href="/admin" className="block w-full p-4 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition mt-4 flex justify-between items-center">
-                <span>⚙️ 관리자 패널</span>
-              </Link>
-            )}
+            <Link href="/test/fruit" className="block w-full p-4 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition">🍎 성격 과일 테스트</Link>
+            <Link href="/test/future-item" className="block w-full p-4 bg-pink-50 text-pink-700 rounded-xl font-bold text-sm hover:bg-pink-100 transition">🚀 미래 인생템 테스트</Link>
+            {user && !isAdmin && <Link href="/my-history" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">📚 내 테스트 기록 보기</Link>}
+            {isAdmin && <Link href="/scripts" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">🎧 대본 아카이브 (Admin)</Link>}
+            {isAdmin && <Link href="/admin" className="block w-full p-4 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition mt-4 flex justify-between items-center"><span>⚙️ 관리자 패널</span></Link>}
           </div>
 
-          {/* 광고 영역 */}
+          {/* 💡 애드센스 광고 삽입 영역 */}
           <div className="sticky top-6">
-            <div className="w-full h-[300px] bg-slate-100 border-2 border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 text-xs text-center p-4">
-              {/* 여기에 추후 구글 애드센스 코드가 들어갑니다 */}
-              Google AdSense 영역
-            </div>
+            <ins className="adsbygoogle"
+                 style={{ display: 'block', minHeight: '300px' }}
+                 data-ad-client="ca-pub-4585319125929329"
+                 data-ad-slot="여기에_발급받은_슬롯_번호를_입력하세요"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
           </div>
         </aside>
       </main>
 
-      {/* 3. 푸터 (애드센스 승인의 핵심: 필수 정책 페이지 링크) */}
       <footer className="bg-white border-t border-slate-200 py-10 mt-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-center md:text-left">
             <h2 className="text-xl font-black text-slate-800 mb-1">MBTIverse</h2>
-            <p className="text-xs text-slate-500 mb-2">운영자 이메일: ot.helper7@gmail.com</p>
+            <p className="text-xs text-slate-500 mb-2">운영자 이메일: ohejunho@naver.com</p>
             <p className="text-xs text-slate-400">© 2026 MBTIverse. All rights reserved.</p>
           </div>
           <div className="flex gap-4 text-sm font-bold text-slate-600">
