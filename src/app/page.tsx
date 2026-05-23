@@ -38,7 +38,9 @@ export default async function Home() {
                 <p className="text-sm text-gray-400 mt-3 flex items-center gap-2">
                   <span>📅</span>
                   {/* Firestore Timestamp 객체를 JS Date로 변환 */}
-                  {post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString('ko-KR') : '방금 전'}
+                  {post.createdAt && typeof post.createdAt.toDate === 'function' 
+                  ? post.createdAt.toDate().toLocaleDateString('ko-KR') 
+                  : '방금 전'}
                 </p>
               </div>
             </Link>
