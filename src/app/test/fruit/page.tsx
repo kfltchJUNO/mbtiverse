@@ -11,7 +11,7 @@ const results: Record<string, { fruit: string; desc: string; emoji: string; part
   ENTP: { fruit: "패션후르츠", desc: "아이디어로 가득한 예측 불가 매력의 소유자!", emoji: "🥝", partner: "INFJ", enemy: "ISFJ", img: "/assets/fruits/패션후르츠.png" },
   ESFJ: { fruit: "국민 과일 사과", desc: "누구와도 잘 어울리는 호불호 없는 성격!", emoji: "🍏", partner: "ISFP", enemy: "INTP", img: "/assets/fruits/사과.png" },
   ESFP: { fruit: "달콤한 파인애플", desc: "어디서든 파티의 주인공이 되는 화려한 사람!", emoji: "🍍", partner: "ISFJ", enemy: "INTJ", img: "/assets/fruits/파인애플.png" },
-  ESTJ: { fruit: "단단한 코코넛", desc: "원칙을 중요시하는 든든한 일꾼 스타일!", emoji: "🥥", partner: "INFP", enemy: "INFP", img: "/assets/fruits/코코넛.png" },
+  ESTJ: { fruit: "단단한 코코넛", desc: "원칙을 중요시하는 든든한 일꾼 스타일!", emoji: "🥥", partner: "INFP", enemy: "ISTP", img: "/assets/fruits/코코넛.png" },
   ESTP: { fruit: "강렬한 체리", desc: "스릴을 즐기는 멈출 수 없는 행동파!", emoji: "🍒", partner: "ISFJ", enemy: "INFJ", img: "/assets/fruits/체리.png" },
   INFJ: { fruit: "외유내강 무화과", desc: "깊고 단단한 내면을 가진 통찰력의 대가!", emoji: "🍑", partner: "ENFP", enemy: "ESTP", img: "/assets/fruits/무화과.png" },
   INFP: { fruit: "몽환적인 블루베리", desc: "감수성이 풍부하고 부드러운 영혼의 소유자!", emoji: "🫐", partner: "ENFJ", enemy: "ESTJ", img: "/assets/fruits/블루베리.png" },
@@ -46,47 +46,78 @@ export default function FruitTest() {
 
   const handleOptionClick = (value: string) => {
     setScores((prev) => ({ ...prev, [value]: prev[value as keyof typeof prev] + 1 }));
-    if (step < 12) setStep(step + 1);
-    else {
-      setStep(13);
+    
+    if (step < questions.length) {
+      setStep(step + 1);
+    } else {
+      setStep(questions.length + 1); 
       setTimeout(() => {
         const { E, I, S, N, T, F, J, P } = scores;
-        setMbtiResult(`${E > I ? "E" : "I"}${S > N ? "S" : "N"}${T > F ? "T" : "F"}${J > P ? "J" : "P"}`);
-        setStep(14);
+        const currentE = value === "E" ? E + 1 : E;
+        const currentI = value === "I" ? I + 1 : I;
+        const currentS = value === "S" ? S + 1 : S;
+        const currentN = value === "N" ? N + 1 : N;
+        const currentT = value === "T" ? T + 1 : T;
+        const currentF = value === "F" ? F + 1 : F;
+        const currentJ = value === "J" ? J + 1 : J;
+        const currentP = value === "P" ? P + 1 : P;
+
+        const calculatedMBTI = 
+          `${currentE >= currentI ? "E" : "I"}${currentS >= currentN ? "S" : "N"}${currentT >= currentF ? "T" : "F"}${currentJ >= currentP ? "J" : "P"}`;
+
+        setMbtiResult(calculatedMBTI);
+        setStep(questions.length + 2);
       }, 2000);
     }
   };
 
+  const analysisStep = questions.length + 1;
+  const resultStep = questions.length + 2;
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center relative overflow-hidden">
+        {step >= 1 && step <= questions.length && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
+            <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${(step / questions.length) * 100}%` }}></div>
+          </div>
+        )}
+
         {step === 0 && (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-black">내 성격이 과일이라면?</h1>
-            <button onClick={() => setStep(1)} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold">테스트 시작</button>
+          <div className="space-y-10 py-6">
+            <h1 className="text-4xl font-black text-slate-900 leading-tight">내 성격이<br />과일이라면?</h1>
+            <button onClick={() => setStep(1)} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg">테스트 시작하기</button>
           </div>
         )}
-        {step >= 1 && step <= 12 && (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">{questions[step - 1].text}</h2>
-            {questions[step - 1].options.map((opt, i) => (
-              <button key={i} onClick={() => handleOptionClick(opt.value)} className="w-full bg-slate-100 p-4 rounded-xl">{opt.text}</button>
-            ))}
-          </div>
-        )}
-        {step === 13 && <p className="text-xl font-bold">분석 중...</p>}
-        {step === 14 && (
-          <div className="space-y-6">
-            <div className="w-40 h-40 mx-auto overflow-hidden rounded-full">
-              <img src={results[mbtiResult].img} className="w-full h-full object-cover object-top" />
+
+        {step >= 1 && step <= questions.length && (
+          <div className="space-y-12 py-6">
+            <h2 className="text-2xl font-black text-slate-800">{questions[step - 1].text}</h2>
+            <div className="space-y-4">
+              {questions[step - 1].options.map((opt, i) => (
+                <button key={i} onClick={() => handleOptionClick(opt.value)} className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-left border border-slate-100 hover:bg-indigo-50">{opt.text}</button>
+              ))}
             </div>
-            <h1 className="text-3xl font-black">{results[mbtiResult].fruit}</h1>
-            <p className="text-slate-600">{results[mbtiResult].desc}</p>
+          </div>
+        )}
+
+        {step === analysisStep && <p className="py-20 text-2xl font-black">분석 중...</p>}
+
+        {step === resultStep && mbtiResult && results[mbtiResult] && (
+          <div className="space-y-10 py-6">
+            <h1 className="text-4xl font-black">{results[mbtiResult].emoji} {results[mbtiResult].fruit}</h1>
+            <div className="w-60 h-60 mx-auto overflow-hidden rounded-full border-8 border-slate-50">
+              <img src={results[mbtiResult].img} className="w-full h-full object-cover object-top" style={{ maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }} />
+            </div>
+            <p className="text-slate-700 leading-relaxed font-medium">{results[mbtiResult].desc}</p>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 p-3 rounded-xl"><p className="text-[10px] font-bold text-green-600">짝꿍</p><p className="font-bold">{results[mbtiResult].partner}</p></div>
-              <div className="bg-red-50 p-3 rounded-xl"><p className="text-[10px] font-bold text-red-600">최악</p><p className="font-bold">{results[mbtiResult].enemy}</p></div>
+              <div className="bg-green-50 p-5 rounded-2xl text-left"><p className="text-xs font-black text-green-600">찰떡 궁합</p><p className="font-bold">{results[mbtiResult].partner}</p></div>
+              <div className="bg-red-50 p-5 rounded-2xl text-left"><p className="text-xs font-black text-red-600">사극 천적</p><p className="font-bold">{results[mbtiResult].enemy}</p></div>
             </div>
-            <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl">다시하기</button>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">테스트 다시하기</button>
+              <Link className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold" href="/">메인으로 가기</Link>
+            </div>
           </div>
         )}
       </div>

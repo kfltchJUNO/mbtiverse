@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
-// 1. 결과 데이터 (16가지 유형)
 const results: Record<string, { item: string; desc: string; img: string }> = {
   ENFJ: { item: "무한 공감 홀로그램", desc: "주변을 따뜻하게 비추는 당신! 모두의 마음을 읽는 최고의 비서입니다.", img: "/assets/items/enfj.png" },
   ENFP: { item: "순간 이동 캡슐", desc: "지루함은 못 참아! 어디든 순식간에 가는 모험가의 필수품.", img: "/assets/items/enfp.png" },
@@ -22,7 +22,6 @@ const results: Record<string, { item: string; desc: string; img: string }> = {
   ISTP: { item: "멀티 만능 툴킷", desc: "무엇이든 뚝딱 고쳐내는 당신을 위한 궁극의 장비.", img: "/assets/items/istp.png" },
 };
 
-// 2. 10개 질문 데이터
 const questions = [
   { text: "퇴근 후 당신의 에너지는?", options: [{ text: "사람들과 파티/모임(E)", value: "E" }, { text: "조용한 나만의 시간(I)", value: "I" }, { text: "그날 기분대로(P)", value: "P" }] },
   { text: "새로운 과제가 생기면?", options: [{ text: "아이디어부터 짠다(N)", value: "N" }, { text: "절차부터 확인(S)", value: "S" }, { text: "닥쳐서 해결한다(P)", value: "P" }] },
@@ -44,10 +43,8 @@ export default function FutureItemTest() {
   const handleOptionClick = (value: string) => {
     const nextScores = { ...scores, [value]: scores[value as keyof typeof scores] + 1 };
     setScores(nextScores);
-
-    if (step < 9) {
-      setStep(step + 1);
-    } else {
+    if (step < 9) setStep(step + 1);
+    else {
       const { E, I, S, N, T, F, J, P } = nextScores;
       setResult(`${E >= I ? "E" : "I"}${S >= N ? "S" : "N"}${T >= F ? "T" : "F"}${J >= P ? "J" : "P"}`);
       setStep(10);
@@ -78,7 +75,10 @@ export default function FutureItemTest() {
           </div>
           <h2 className="text-3xl font-black text-indigo-600">{results[result as keyof typeof results]?.item}</h2>
           <p className="text-slate-600 break-keep">{results[result as keyof typeof results]?.desc}</p>
-          <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">다시 하기</button>
+          <div className="flex flex-col gap-3">
+            <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">다시 하기</button>
+            <Link href="/" className="w-full bg-slate-100 py-4 rounded-xl font-bold">메인으로 가기</Link>
+          </div>
         </div>
       )}
     </div>
