@@ -10,7 +10,6 @@ export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   
-  // 인증 및 인앱 브라우저 제어 커스텀 훅
   const { user, loading: loadingAuth, isAdmin, loginWithGoogle, logout, isInAppBrowser } = useAuthGuard();
 
   useEffect(() => {
@@ -34,7 +33,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      {/* 상단 캐주얼 배너 */}
       <section className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white py-12 px-6 text-center shadow-md">
         <div className="max-w-3xl mx-auto">
           <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm">
@@ -49,10 +47,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 메인 레이아웃 */}
       <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-8">
-        
-        {/* 왼쪽: 콘텐츠 리스트 */}
         <div className="lg:col-span-3 space-y-6">
           <div className="flex gap-2 border-b border-slate-200 pb-3 text-sm font-bold text-slate-400">
             <span className="text-indigo-600 border-b-2 border-indigo-600 pb-3 px-1">🔥 실시간 인기 썰</span>
@@ -76,10 +71,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* 오른쪽: 인증 & 테스트 모음 & 광고 */}
         <aside className="lg:col-span-1 space-y-6">
-          
-          {/* 인앱 브라우저 경고 */}
           {isInAppBrowser && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
               ⚠️ 현재 인앱 브라우저 환경입니다.<br />
@@ -88,7 +80,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* 구글 로그인 영역 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
             <h3 className="font-black text-slate-800">👤 내 계정</h3>
             {loadingAuth ? (
@@ -110,7 +101,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* 테스트 및 메뉴 버튼 영역 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
             <h3 className="font-black text-slate-800 mb-4">🚀 테스트 바로가기</h3>
             <Link href="/test/fruit" className="block w-full p-4 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition">
@@ -120,14 +110,21 @@ export default function Home() {
               🚀 미래 인생템 테스트
             </Link>
             
-            {/* 로그인한 유저 전용: 대본 보기 */}
-            {user && (
-              <Link href="/scripts" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">
-                🎧 내 생성 대본 보기
+            {/* 💡 일반 로그인 유저 전용 (관리자가 아닌 경우): 테스트 기록 보기 (향후 구현을 위한 자리표시자) */}
+            {user && !isAdmin && (
+              <Link href="/my-history" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">
+                📚 내 테스트 기록 보기
               </Link>
             )}
 
-            {/* 어드민 전용: 관리자 패널 */}
+            {/* 🔒 관리자 전용: 대본 보기 */}
+            {isAdmin && (
+              <Link href="/scripts" className="block w-full p-4 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition mt-4">
+                🎧 내 생성 대본 보기 (Admin)
+              </Link>
+            )}
+
+            {/* 🔒 관리자 전용: 관리자 패널 */}
             {isAdmin && (
               <Link href="/admin" className="block w-full p-4 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition mt-4 flex justify-between items-center">
                 <span>⚙️ 관리자 패널</span>
@@ -136,7 +133,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* 광고 영역 */}
           <div className="sticky top-6">
             <div className="w-full h-[300px] bg-white border border-dashed border-slate-300 rounded-2xl flex items-center justify-center text-slate-400 text-xs text-center p-4">
               Google AdSense

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../../lib/firebase";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
 // 🍎 1. 결과 데이터 (16가지 MBTI 상세 데이터)
 const results: Record<string, { fruit: string; desc: string; emoji: string; partner: string; enemy: string; img: string }> = {
@@ -43,6 +46,8 @@ export default function FruitTest() {
   const [step, setStep] = useState(0);
   const [scores, setScores] = useState({ E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 });
   const [mbtiResult, setMbtiResult] = useState("");
+  
+  const { user } = useAuthGuard();
 
   const handleOptionClick = (value: string) => {
     setScores((prev) => ({ ...prev, [value]: prev[value as keyof typeof prev] + 1 }));
@@ -51,7 +56,8 @@ export default function FruitTest() {
       setStep(step + 1);
     } else {
       setStep(questions.length + 1); 
-      setTimeout(() => {
+      
+      setTimeout(async () => {
         const { E, I, S, N, T, F, J, P } = scores;
         const currentE = value === "E" ? E + 1 : E;
         const currentI = value === "I" ? I + 1 : I;
@@ -67,6 +73,20 @@ export default function FruitTest() {
 
         setMbtiResult(calculatedMBTI);
         setStep(questions.length + 2);
+
+        if (user) {
+          try {
+            await addDoc(collection(db, "testHistory"), {
+              userId: user.uid,
+              testName: "🍎 성격 과일 테스트",
+              mbti: calculatedMBTI,
+              resultName: results[calculatedMBTI].emoji + " " + results[calculatedMBTI].fruit,
+              createdAt: serverTimestamp()
+            });
+          } catch (error) {
+            console.error("결과 저장 실패:", error);
+          }
+        }
       }, 2000);
     }
   };
@@ -79,44 +99,120 @@ export default function FruitTest() {
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center relative overflow-hidden">
         {step >= 1 && step <= questions.length && (
           <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
-            <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${(step / questions.length) * 100}%` }}></div>
+            <div 
+              className="h-full bg-indigo-500 transition-all duration-300" 
+              style={{ width: `${(step / questions.length) * 100}%` }}
+            ></div>
           </div>
         )}
 
         {step === 0 && (
           <div className="space-y-10 py-6">
-            <h1 className="text-4xl font-black text-slate-900 leading-tight">내 성격이<br />과일이라면?</h1>
-            <button onClick={() => setStep(1)} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg">테스트 시작하기</button>
+            <div className="space-y-4">
+              <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-bold px-4 py-1.5 rounded-full">
+                성격 유형 테스트
+              </span>
+              <h1 className="text-4xl font-black text-slate-900 leading-tight">
+                내 성격이<br />과일이라면?
+              </h1>
+              <p className="text-slate-500 max-w-xs mx-auto">
+                간단한 12가지 질문으로 알아보는<br/>나와 닮은 상큼달콤 과일 유형
+              </p>
+            </div>
+            <img src="/assets/fruits/사과.png" alt="과일 캐릭터" className="w-40 h-40 mx-auto object-cover object-top mask-bottom" />
+            <button 
+              onClick={() => setStep(1)} 
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition active:scale-[0.98]"
+            >
+              테스트 시작하기
+            </button>
           </div>
         )}
 
         {step >= 1 && step <= questions.length && (
           <div className="space-y-12 py-6">
-            <h2 className="text-2xl font-black text-slate-800">{questions[step - 1].text}</h2>
+            <div className="space-y-4">
+              <span className="text-sm font-bold text-indigo-500">
+                Q {step} / {questions.length}
+              </span>
+              <h2 className="text-2xl font-black text-slate-800 leading-snug">
+                {questions[step - 1].text}
+              </h2>
+            </div>
             <div className="space-y-4">
               {questions[step - 1].options.map((opt, i) => (
-                <button key={i} onClick={() => handleOptionClick(opt.value)} className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-left border border-slate-100 hover:bg-indigo-50">{opt.text}</button>
+                <button 
+                  key={i} 
+                  onClick={() => handleOptionClick(opt.value)} 
+                  className="w-full bg-slate-50 text-slate-700 p-6 rounded-2xl font-medium text-lg text-left border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-800 transition active:scale-[0.98]"
+                >
+                  {opt.text}
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        {step === analysisStep && <p className="py-20 text-2xl font-black">분석 중...</p>}
+        {step === analysisStep && (
+          <div className="space-y-8 py-16 flex flex-col items-center justify-center">
+            <div className="w-20 h-20 border-8 border-slate-100 border-t-indigo-500 rounded-full animate-spin"></div>
+            <p className="text-2xl font-black text-slate-800 mt-6">
+              상큼달콤 과일<br/>유형 분석 중...
+            </p>
+          </div>
+        )}
 
         {step === resultStep && mbtiResult && results[mbtiResult] && (
           <div className="space-y-10 py-6">
-            <h1 className="text-4xl font-black">{results[mbtiResult].emoji} {results[mbtiResult].fruit}</h1>
-            <div className="w-60 h-60 mx-auto overflow-hidden rounded-full border-8 border-slate-50">
-              <img src={results[mbtiResult].img} className="w-full h-full object-cover object-top" style={{ maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }} />
+            <div className="space-y-3">
+              <span className="text-sm font-bold text-indigo-600">당신의 과일 유형은?</span>
+              <h1 className="text-4xl font-black text-slate-900">
+                {results[mbtiResult].emoji} {results[mbtiResult].fruit}
+              </h1>
+              <p className="text-indigo-900 bg-indigo-50 inline-block px-3 py-1 rounded-md text-sm font-bold tracking-wider">{mbtiResult}</p>
             </div>
-            <p className="text-slate-700 leading-relaxed font-medium">{results[mbtiResult].desc}</p>
+            
+            <div className="w-60 h-60 mx-auto overflow-hidden rounded-full border-8 border-slate-50 shadow-inner">
+              <img 
+                src={results[mbtiResult].img} 
+                alt={results[mbtiResult].fruit}
+                className="w-full h-full object-cover object-top mask-bottom" 
+              />
+            </div>
+            
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-left">
+              <p className="text-slate-700 leading-relaxed break-keep font-medium">
+                {results[mbtiResult].desc}
+              </p>
+            </div>
+            
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 p-5 rounded-2xl text-left"><p className="text-xs font-black text-green-600">찰떡 궁합</p><p className="font-bold">{results[mbtiResult].partner}</p></div>
-              <div className="bg-red-50 p-5 rounded-2xl text-left"><p className="text-xs font-black text-red-600">사극 천적</p><p className="font-bold">{results[mbtiResult].enemy}</p></div>
+              <div className="bg-green-50 p-5 rounded-2xl border border-green-100 text-left space-y-2">
+                <p className="text-xs font-black text-green-600 uppercase tracking-wider">찰떡 궁합</p>
+                <p className="font-bold text-green-950 text-lg leading-snug">
+                  {results[mbtiResult].partner} 
+                  <span className="text-sm block font-medium opacity-80">{results[results[mbtiResult].partner]?.fruit || ""}</span>
+                </p>
+              </div>
+              <div className="bg-red-50 p-5 rounded-2xl border border-red-100 text-left space-y-2">
+                <p className="text-xs font-black text-red-600 uppercase tracking-wider">사극 천적</p>
+                <p className="font-bold text-red-950 text-lg leading-snug">
+                  {results[mbtiResult].enemy}
+                  <span className="text-sm block font-medium opacity-80">{results[results[mbtiResult].enemy]?.fruit || ""}</span>
+                </p>
+              </div>
             </div>
-            <div className="flex flex-col gap-3">
-              <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">테스트 다시하기</button>
-              <Link className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold" href="/">메인으로 가기</Link>
+            
+            <div className="flex flex-col gap-3 pt-6 border-t border-slate-100">
+              <button 
+                onClick={() => window.location.reload()} 
+                className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-900 transition active:scale-[0.98]"
+              >
+                테스트 다시하기
+              </button>
+              <Link className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold hover:bg-slate-200 transition active:scale-[0.98]" href="/">
+                메인으로 가기
+              </Link>
             </div>
           </div>
         )}

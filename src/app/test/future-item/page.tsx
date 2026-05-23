@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../../lib/firebase";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
-// 1. 결과 데이터 (16가지 유형)
 const results: Record<string, { item: string; desc: string; img: string }> = {
   ENFJ: { item: "무한 공감 홀로그램", desc: "주변을 따뜻하게 비추는 당신! 모두의 마음을 읽는 최고의 비서입니다.", img: "/assets/items/enfj.png" },
   ENFP: { item: "순간 이동 캡슐", desc: "지루함은 못 참아! 어디든 순식간에 가는 모험가의 필수품.", img: "/assets/items/enfp.png" },
@@ -22,18 +25,17 @@ const results: Record<string, { item: string; desc: string; img: string }> = {
   ISTP: { item: "멀티 만능 툴킷", desc: "무엇이든 뚝딱 고쳐내는 당신을 위한 궁극의 장비.", img: "/assets/items/istp.png" },
 };
 
-// 2. 10개 질문 데이터
 const questions = [
-  { text: "퇴근 후 당신의 에너지는?", options: [{ text: "사람들과 파티/모임", value: "E" }, { text: "조용한 나만의 시간", value: "I" }, { text: "그날 기분대로", value: "P" }] },
-  { text: "새로운 과제가 생기면?", options: [{ text: "아이디어부터 짠다", value: "N" }, { text: "절차부터 확인", value: "S" }, { text: "닥쳐서 해결한다", value: "P" }] },
-  { text: "친구 고민 상담 시 나는?", options: [{ text: "무조건 공감", value: "F" }, { text: "냉철한 해결책", value: "T" }, { text: "내 생각을 정리", value: "I" }] },
-  { text: "여행 계획을 짤 때?", options: [{ text: "분 단위 계획", value: "J" }, { text: "즉흥적 여행", value: "P" }, { text: "예산/안전 우선", value: "S" }] },
-  { text: "친구가 늦는다면?", options: [{ text: "불쾌함, 원칙 중시", value: "J" }, { text: "그럴 수 있지", value: "P" }, { text: "사람 구경하며 대기", value: "E" }] },
-  { text: "세상의 진리는?", options: [{ text: "추상적 의미", value: "N" }, { text: "눈앞의 현실", value: "S" }, { text: "논리적 팩트", value: "T" }] },
-  { text: "인생의 목표는?", options: [{ text: "대외적 성공", value: "E" }, { text: "내면의 성장", value: "I" }, { text: "계획적인 완수", value: "J" }] },
-  { text: "감정 표현은 어떻게?", options: [{ text: "솔직한 감정 공유", value: "F" }, { text: "절제된 표현", value: "T" }, { text: "비유적 표현", value: "N" }] },
-  { text: "업무 처리 스타일은?", options: [{ text: "체계적인 분배", value: "J" }, { text: "몰아서 처리", value: "P" }, { text: "현실적인 마무리", value: "S" }] },
-  { text: "혼자 방에 있을 때?", options: [{ text: "휴식/사색", value: "I" }, { text: "SNS로 소통", value: "E" }, { text: "상상/몽상", value: "N" }] },
+  { text: "퇴근 후 당신의 에너지는?", options: [{ text: "사람들과 파티/모임(E)", value: "E" }, { text: "조용한 나만의 시간(I)", value: "I" }, { text: "그날 기분대로(P)", value: "P" }] },
+  { text: "새로운 과제가 생기면?", options: [{ text: "아이디어부터 짠다(N)", value: "N" }, { text: "절차부터 확인(S)", value: "S" }, { text: "닥쳐서 해결한다(P)", value: "P" }] },
+  { text: "친구 고민 상담 시 나는?", options: [{ text: "무조건 공감(F)", value: "F" }, { text: "냉철한 해결책(T)", value: "T" }, { text: "내 생각을 정리(I)", value: "I" }] },
+  { text: "여행 계획을 짤 때?", options: [{ text: "분 단위 계획(J)", value: "J" }, { text: "즉흥적 여행(P)", value: "P" }, { text: "예산/안전 우선(S)", value: "S" }] },
+  { text: "친구가 늦는다면?", options: [{ text: "불쾌함, 원칙 중시(J)", value: "J" }, { text: "그럴 수 있지(P)", value: "P" }, { text: "사람 구경하며 대기(E)", value: "E" }] },
+  { text: "세상의 진리는?", options: [{ text: "추상적 의미(N)", value: "N" }, { text: "눈앞의 현실(S)", value: "S" }, { text: "논리적 팩트(T)", value: "T" }] },
+  { text: "인생의 목표는?", options: [{ text: "대외적 성공(E)", value: "E" }, { text: "내면의 성장(I)", value: "I" }, { text: "계획적인 완수(J)", value: "J" }] },
+  { text: "감정 표현은 어떻게?", options: [{ text: "솔직한 감정 공유(F)", value: "F" }, { text: "절제된 표현(T)", value: "T" }, { text: "비유적 표현(N)", value: "N" }] },
+  { text: "업무 처리 스타일은?", options: [{ text: "체계적인 분배(J)", value: "J" }, { text: "몰아서 처리(P)", value: "P" }, { text: "현실적인 마무리(S)", value: "S" }] },
+  { text: "혼자 방에 있을 때?", options: [{ text: "휴식/사색(I)", value: "I" }, { text: "SNS로 소통(E)", value: "E" }, { text: "상상/몽상(N)", value: "N" }] },
 ];
 
 export default function FutureItemTest() {
@@ -41,16 +43,33 @@ export default function FutureItemTest() {
   const [scores, setScores] = useState({ E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 });
   const [result, setResult] = useState("");
 
-  const handleOptionClick = (value: string) => {
+  const { user } = useAuthGuard();
+
+  const handleOptionClick = async (value: string) => {
     const nextScores = { ...scores, [value]: scores[value as keyof typeof scores] + 1 };
     setScores(nextScores);
-
+    
     if (step < 9) {
       setStep(step + 1);
     } else {
       const { E, I, S, N, T, F, J, P } = nextScores;
-      setResult(`${E >= I ? "E" : "I"}${S >= N ? "S" : "N"}${T >= F ? "T" : "F"}${J >= P ? "J" : "P"}`);
+      const calculatedMBTI = `${E >= I ? "E" : "I"}${S >= N ? "S" : "N"}${T >= F ? "T" : "F"}${J >= P ? "J" : "P"}`;
+      setResult(calculatedMBTI);
       setStep(10);
+
+      if (user) {
+        try {
+          await addDoc(collection(db, "testHistory"), {
+            userId: user.uid,
+            testName: "🚀 미래 인생템 테스트",
+            mbti: calculatedMBTI,
+            resultName: results[calculatedMBTI].item,
+            createdAt: serverTimestamp()
+          });
+        } catch (error) {
+          console.error("결과 저장 실패:", error);
+        }
+      }
     }
   };
 
@@ -61,7 +80,11 @@ export default function FutureItemTest() {
           <p className="text-sm text-indigo-500 font-bold">진행도: {step + 1} / 10</p>
           <h2 className="text-2xl font-black">{questions[step].text}</h2>
           {questions[step].options.map((opt, i) => (
-            <button key={i} onClick={() => handleOptionClick(opt.value)} className="w-full p-6 bg-slate-50 rounded-2xl font-bold text-left border-2 hover:border-indigo-500 transition-all">
+            <button 
+              key={i} 
+              onClick={() => handleOptionClick(opt.value)} 
+              className="w-full p-6 bg-slate-50 rounded-2xl font-bold text-left border-2 hover:border-indigo-500 transition-all"
+            >
               {opt.text}
             </button>
           ))}
@@ -73,12 +96,28 @@ export default function FutureItemTest() {
              <img 
                src={results[result as keyof typeof results]?.img} 
                className="w-full h-full object-cover object-top" 
-               style={{ maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }} 
+               style={{ 
+                 maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', 
+                 WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' 
+               }} 
              />
           </div>
           <h2 className="text-3xl font-black text-indigo-600">{results[result as keyof typeof results]?.item}</h2>
           <p className="text-slate-600 break-keep">{results[result as keyof typeof results]?.desc}</p>
-          <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">다시 하기</button>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition"
+            >
+              다시 하기
+            </button>
+            <Link 
+              href="/" 
+              className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold hover:bg-slate-200 transition"
+            >
+              메인으로 가기
+            </Link>
+          </div>
         </div>
       )}
     </div>
