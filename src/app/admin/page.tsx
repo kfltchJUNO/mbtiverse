@@ -1,26 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { MbtiContent } from "../../lib/gemini";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 export default function AdminDashboard() {
   const [keyword, setKeyword] = useState("");
   const [title, setTitle] = useState("");
+  const [contentType, setContentType] = useState<"short" | "long">("short");
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [results, setResults] = useState<MbtiContent[]>([]);
+  const [results, setResults] = useState<any[]>([]);
 
-  // 1. Gemini API 호출 로직 (대본 생성)
   const handleGenerate = async () => {
     if (!keyword) return alert("키워드를 입력해주세요.");
     setLoading(true);
     try {
+      // 💡 API로 contentType 파라미터를 함께 넘겨 프롬프트를 다르게 적용해야 합니다.
       const res = await fetch("/api/admin/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword }),
+        body: JSON.stringify({ keyword, type: contentType }), 
       });
       const json = await res.json();
       
@@ -35,13 +35,11 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  // 2. 대본 복사 로직 (일레븐랩스용)
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert("대본이 복사되었습니다. 일레븐랩스에 붙여넣으세요!");
+    alert("내용이 복사되었습니다.");
   };
 
-  // 3. Firebase DB 저장 로직 (라이브 발행)
   const handlePublish = async () => {
     if (!title) return alert("메인 화면에 노출될 제목을 입력해주세요!");
     if (results.length === 0) return alert("생성된 콘텐츠가 없습니다.");
@@ -51,11 +49,12 @@ export default function AdminDashboard() {
       await addDoc(collection(db, "posts"), {
         title,
         keyword,
+        type: contentType, // 💡 발행 시 콘텐츠 타입(short/long)도 함께 저장
         contents: results,
         createdAt: serverTimestamp(),
       });
       alert("🔥 성공적으로 라이브 서버에 발행되었습니다!");
-      setTitle(""); // 다음 작업을 위해 제목란 비우기
+      setTitle(""); 
     } catch (error) {
       console.error(error);
       alert("DB 저장 중 오류가 발생했습니다.");
@@ -65,11 +64,25 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
-      {/* 💡 기존 흰색 톤에서 다크 테마(어드민 레이아웃과 동일)에 맞춰 색상 변경 */}
       <div className="flex flex-col gap-4 mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
         
-        {/* 키워드 및 대본 생성 영역 */}
-        <div className="flex gap-4">
+        {/* 콘텐츠 타입 선택 토글 */}
+        <div className="flex gap-2 p-1 bg-slate-900 rounded-xl w-max border border-slate-700">
+          <button 
+            onClick={() => setContentType("short")}
+            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${contentType === "short" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            ⚡ 쇼츠 대본용 (초고속 정독)
+          </button>
+          <button 
+            onClick={() => setContentType("long")}
+            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${contentType === "long" ? "bg-emerald-600 text-white shadow-md" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            📚 아티클용 (심층 분석 리포트)
+          </button>
+        </div>
+
+        <div className="flex gap-4 mt-2">
           <input 
             type="text" 
             placeholder="주제 키워드 (예: 카톡 안 읽씹할 때)" 
@@ -80,26 +93,25 @@ export default function AdminDashboard() {
           <button 
             onClick={handleGenerate} 
             disabled={loading}
-            className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={`px-8 py-4 rounded-xl font-bold text-white transition-colors disabled:opacity-50 ${contentType === "short" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
           >
-            {loading ? "생성 중..." : "대본 생성"}
+            {loading ? "생성 중..." : "콘텐츠 생성"}
           </button>
         </div>
 
-        {/* 결과가 있을 때만 나타나는 발행 영역 */}
         {results.length > 0 && (
           <div className="flex gap-4 mt-4 pt-6 border-t border-slate-700">
             <input 
               type="text" 
-              placeholder="메인 화면에 보여줄 제목 (예: MBTI별 카톡 안 읽씹할 때)" 
-              className="flex-1 p-4 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-500"
+              placeholder="메인 화면에 보여줄 제목을 입력하세요." 
+              className="flex-1 p-4 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
             <button 
               onClick={handlePublish} 
               disabled={isSaving}
-              className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-md transition-colors whitespace-nowrap"
+              className="bg-white text-slate-900 px-8 py-4 rounded-xl font-black hover:bg-slate-200 disabled:opacity-50 transition-colors"
             >
               {isSaving ? "저장 중..." : "🚀 라이브 발행하기"}
             </button>
@@ -107,30 +119,23 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* 16개 MBTI 결과 렌더링 카드 */}
       {results.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {results.map((item) => (
             <div key={item.mbti} className="border border-slate-700 rounded-2xl p-6 shadow-sm bg-slate-800 flex flex-col h-full">
-              <h3 className="text-xl font-black text-indigo-400 mb-4">{item.mbti}</h3>
+              <h3 className={`text-xl font-black mb-4 ${contentType === "short" ? "text-indigo-400" : "text-emerald-400"}`}>{item.mbti}</h3>
               
-              {/* 대본 출력 텍스트 박스: bg-slate-900 적용하여 글씨가 잘 보이도록 처리 */}
-              <div className="flex-1 text-sm text-slate-200 whitespace-pre-wrap mb-4 bg-slate-900 p-4 rounded-xl border border-slate-700 h-48 overflow-y-auto leading-relaxed font-medium">
+              <div className="flex-1 text-sm text-slate-200 whitespace-pre-wrap mb-4 bg-slate-900 p-4 rounded-xl border border-slate-700 h-64 overflow-y-auto leading-relaxed font-medium">
                 {item.script}
               </div>
               
               <div className="flex flex-col gap-3 mt-auto">
                 <button 
                   onClick={() => copyToClipboard(item.script)}
-                  className="w-full bg-slate-700 text-white py-3 rounded-xl text-sm font-bold hover:bg-slate-600 transition-colors flex justify-center items-center gap-2"
+                  className="w-full bg-slate-700 text-white py-3 rounded-xl text-sm font-bold hover:bg-slate-600"
                 >
-                  <span>📝</span> 대본 복사 (ElevenLabs)
+                  📝 내용 복사
                 </button>
-                
-                <div className="text-xs text-slate-400 mt-2 p-3 bg-slate-900 rounded-xl border border-slate-700">
-                  <strong className="block mb-1 text-indigo-300">Imagen 3 프롬프트:</strong>
-                  <p className="line-clamp-3 leading-relaxed">{item.imagePrompt}</p>
-                </div>
               </div>
             </div>
           ))}

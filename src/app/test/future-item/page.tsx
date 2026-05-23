@@ -26,16 +26,16 @@ const results: Record<string, { item: string; desc: string; img: string }> = {
 };
 
 const questions = [
-  { text: "퇴근 후 당신의 에너지는?", options: [{ text: "사람들과 파티/모임(E)", value: "E" }, { text: "조용한 나만의 시간(I)", value: "I" }, { text: "그날 기분대로(P)", value: "P" }] },
-  { text: "새로운 과제가 생기면?", options: [{ text: "아이디어부터 짠다(N)", value: "N" }, { text: "절차부터 확인(S)", value: "S" }, { text: "닥쳐서 해결한다(P)", value: "P" }] },
-  { text: "친구 고민 상담 시 나는?", options: [{ text: "무조건 공감(F)", value: "F" }, { text: "냉철한 해결책(T)", value: "T" }, { text: "내 생각을 정리(I)", value: "I" }] },
-  { text: "여행 계획을 짤 때?", options: [{ text: "분 단위 계획(J)", value: "J" }, { text: "즉흥적 여행(P)", value: "P" }, { text: "예산/안전 우선(S)", value: "S" }] },
-  { text: "친구가 늦는다면?", options: [{ text: "불쾌함, 원칙 중시(J)", value: "J" }, { text: "그럴 수 있지(P)", value: "P" }, { text: "사람 구경하며 대기(E)", value: "E" }] },
-  { text: "세상의 진리는?", options: [{ text: "추상적 의미(N)", value: "N" }, { text: "눈앞의 현실(S)", value: "S" }, { text: "논리적 팩트(T)", value: "T" }] },
-  { text: "인생의 목표는?", options: [{ text: "대외적 성공(E)", value: "E" }, { text: "내면의 성장(I)", value: "I" }, { text: "계획적인 완수(J)", value: "J" }] },
-  { text: "감정 표현은 어떻게?", options: [{ text: "솔직한 감정 공유(F)", value: "F" }, { text: "절제된 표현(T)", value: "T" }, { text: "비유적 표현(N)", value: "N" }] },
-  { text: "업무 처리 스타일은?", options: [{ text: "체계적인 분배(J)", value: "J" }, { text: "몰아서 처리(P)", value: "P" }, { text: "현실적인 마무리(S)", value: "S" }] },
-  { text: "혼자 방에 있을 때?", options: [{ text: "휴식/사색(I)", value: "I" }, { text: "SNS로 소통(E)", value: "E" }, { text: "상상/몽상(N)", value: "N" }] },
+  { text: "퇴근 후 당신의 에너지는?", options: [{ text: "사람들과 파티/모임", value: "E" }, { text: "조용한 나만의 시간", value: "I" }, { text: "그날 기분대로", value: "P" }] },
+  { text: "새로운 과제가 생기면?", options: [{ text: "아이디어부터 짠다", value: "N" }, { text: "절차부터 확인", value: "S" }, { text: "닥쳐서 해결한다", value: "P" }] },
+  { text: "친구 고민 상담 시 나는?", options: [{ text: "무조건 공감", value: "F" }, { text: "냉철한 해결책", value: "T" }, { text: "내 생각을 정리", value: "I" }] },
+  { text: "여행 계획을 짤 때?", options: [{ text: "분 단위 계획", value: "J" }, { text: "즉흥적 여행", value: "P" }, { text: "예산/안전 우선", value: "S" }] },
+  { text: "친구가 늦는다면?", options: [{ text: "불쾌함, 원칙 중시", value: "J" }, { text: "그럴 수 있지", value: "P" }, { text: "사람 구경하며 대기", value: "E" }] },
+  { text: "세상의 진리는?", options: [{ text: "추상적 의미", value: "N" }, { text: "눈앞의 현실", value: "S" }, { text: "논리적 팩트", value: "T" }] },
+  { text: "인생의 목표는?", options: [{ text: "대외적 성공", value: "E" }, { text: "내면의 성장", value: "I" }, { text: "계획적인 완수", value: "J" }] },
+  { text: "감정 표현은 어떻게?", options: [{ text: "솔직한 감정 공유", value: "F" }, { text: "절제된 표현", value: "T" }, { text: "비유적 표현", value: "N" }] },
+  { text: "업무 처리 스타일은?", options: [{ text: "체계적인 분배", value: "J" }, { text: "몰아서 처리", value: "P" }, { text: "현실적인 마무리", value: "S" }] },
+  { text: "혼자 방에 있을 때?", options: [{ text: "휴식/사색", value: "I" }, { text: "SNS로 소통", value: "E" }, { text: "상상/몽상", value: "N" }] },
 ];
 
 export default function FutureItemTest() {
