@@ -4,6 +4,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const apiKey = process.env.GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(apiKey);
 
+const FALLBACK_MODELS = [
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash"
+];
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -17,8 +23,6 @@ export async function POST(req: Request) {
       ? `[작성 스타일: 아티클용 심층 분석] 각 MBTI별로 최소 600자 이상의 전문적인 심리학적 통찰을 포함한 칼럼을 작성해.` 
       : `[작성 스타일: 쇼츠 대본용] 각 MBTI별로 200자 내외의 재치 있고 빠른 템포의 대본을 작성해.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
-
     const prompt = `
       너는 MBTI 전문가야. 주제 "${keyword}"에 대해 16가지 MBTI 유형의 반응을 작성해줘.
       ${styleInstruction}
@@ -30,11 +34,27 @@ export async function POST(req: Request) {
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    let responseText = "";
+    let success = false;
 
-    // 💡 정규식 문법 수정 (에러 해결)
-    // replace 메서드에 정규식 /```json/g 가 아닌 문자열 기반 replace를 사용하거나 정규식을 정확히 닫아야 합니다.
+    // 💡 FALLBACK_MODELS를 순회하며 요청 시도
+    for (const modelName of FALLBACK_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        responseText = result.response.text();
+        success = true;
+        break; // 성공하면 루프 종료
+      } catch (err) {
+        console.error(`모델 ${modelName} 실패, 다음 모델 시도 중...`);
+        continue;
+      }
+    }
+
+    if (!success) {
+      throw new Error("모든 모델에서 콘텐츠 생성에 실패했습니다.");
+    }
+
     const cleanedText = responseText
       .replace(/```json/g, "")
       .replace(/```/g, "")
