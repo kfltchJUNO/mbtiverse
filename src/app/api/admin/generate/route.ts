@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       ? `[작성 스타일: 아티클용 심층 분석] 각 MBTI별로 최소 600자 이상의 전문적인 심리학적 통찰을 포함한 칼럼을 작성해.` 
       : `[작성 스타일: 쇼츠 대본용] 각 MBTI별로 200자 내외의 재치 있고 빠른 템포의 대본을 작성해.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
     const prompt = `
       너는 MBTI 전문가야. 주제 "${keyword}"에 대해 16가지 MBTI 유형의 반응을 작성해줘.
