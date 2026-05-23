@@ -39,87 +39,193 @@ const questions = [
 ];
 
 export default function FutureItemTest() {
-  const [step, setStep] = useState(0);
-  const [scores, setScores] = useState({ E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 });
+  const [step, setStep] = useState(0); // 0: 인트로, 1~10: 질문, 11: 분석중, 12: 결과
+  const [answers, setAnswers] = useState<string[]>([]);
   const [result, setResult] = useState("");
 
   const { user } = useAuthGuard();
 
-  const handleOptionClick = async (value: string) => {
-    const nextScores = { ...scores, [value]: scores[value as keyof typeof scores] + 1 };
-    setScores(nextScores);
-    
-    if (step < 9) {
-      setStep(step + 1);
-    } else {
-      const { E, I, S, N, T, F, J, P } = nextScores;
-      const calculatedMBTI = `${E >= I ? "E" : "I"}${S >= N ? "S" : "N"}${T >= F ? "T" : "F"}${J >= P ? "J" : "P"}`;
-      setResult(calculatedMBTI);
-      setStep(10);
-
-      if (user) {
-        try {
-          await addDoc(collection(db, "testHistory"), {
-            userId: user.uid,
-            testName: "🚀 미래 인생템 테스트",
-            mbti: calculatedMBTI,
-            resultName: results[calculatedMBTI].item,
-            createdAt: serverTimestamp()
-          });
-        } catch (error) {
-          console.error("결과 저장 실패:", error);
-        }
-      }
+  const handleBack = () => {
+    if (step === 1) {
+      setStep(0);
+      setAnswers([]);
+    } else if (step > 1 && step <= questions.length) {
+      setStep(step - 1);
+      setAnswers((prev) => prev.slice(0, -1));
     }
   };
 
+  const handleOptionClick = (value: string) => {
+    const newAnswers = [...answers, value];
+    setAnswers(newAnswers);
+    
+    if (step < questions.length) {
+      setStep(step + 1);
+    } else {
+      setStep(questions.length + 1); // 로딩 뷰
+      
+      setTimeout(async () => {
+        const counts: Record<string, number> = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+        newAnswers.forEach((val) => {
+          if (counts[val] !== undefined) counts[val]++;
+        });
+
+        const calculatedMBTI = 
+          `${counts.E >= counts.I ? "E" : "I"}${counts.S >= counts.N ? "S" : "N"}${counts.T >= counts.F ? "T" : "F"}${counts.J >= counts.P ? "J" : "P"}`;
+        
+        setResult(calculatedMBTI);
+        setStep(questions.length + 2); // 결과 뷰
+
+        if (user) {
+          try {
+            await addDoc(collection(db, "testHistory"), {
+              userId: user.uid,
+              testName: "🚀 미래 인생템 테스트",
+              mbti: calculatedMBTI,
+              resultName: results[calculatedMBTI].item,
+              createdAt: serverTimestamp()
+            });
+          } catch (error) {
+            console.error("결과 저장 실패:", error);
+          }
+        }
+      }, 2000);
+    }
+  };
+
+  const analysisStep = questions.length + 1;
+  const resultStep = questions.length + 2;
+
   return (
-    <div className="max-w-md mx-auto p-6 bg-white min-h-screen">
-      {step < 10 ? (
-        <div className="space-y-6 mt-10">
-          <p className="text-sm text-indigo-500 font-bold">진행도: {step + 1} / 10</p>
-          <h2 className="text-2xl font-black">{questions[step].text}</h2>
-          {questions[step].options.map((opt, i) => (
-            <button 
-              key={i} 
-              onClick={() => handleOptionClick(opt.value)} 
-              className="w-full p-6 bg-slate-50 rounded-2xl font-bold text-left border-2 hover:border-indigo-500 transition-all"
-            >
-              {opt.text}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center mt-10 space-y-6">
-          <h1 className="text-2xl font-black">당신의 미래 인생템은?</h1>
-          <div className="w-40 h-40 mx-auto rounded-3xl overflow-hidden border-4 relative">
-             <img 
-               src={results[result as keyof typeof results]?.img} 
-               className="w-full h-full object-cover object-top" 
-               style={{ 
-                 maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', 
-                 WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' 
-               }} 
-             />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center relative overflow-hidden">
+        
+        {/* 상단 프로그레스 바 */}
+        {step >= 1 && step <= questions.length && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
+            <div 
+              className="h-full bg-pink-500 transition-all duration-300" 
+              style={{ width: `${(step / questions.length) * 100}%` }}
+            ></div>
           </div>
-          <h2 className="text-3xl font-black text-indigo-600">{results[result as keyof typeof results]?.item}</h2>
-          <p className="text-slate-600 break-keep">{results[result as keyof typeof results]?.desc}</p>
-          <div className="flex flex-col gap-3">
+        )}
+
+        {/* 0단계: 인트로 */}
+        {step === 0 && (
+          <div className="space-y-10 py-6">
+            <div className="space-y-4">
+              <span className="inline-block bg-pink-50 text-pink-700 text-xs font-bold px-4 py-1.5 rounded-full">
+                미래 예측 테스트
+              </span>
+              <h1 className="text-4xl font-black text-slate-900 leading-tight">
+                나의 미래<br />인생템은?
+              </h1>
+              <p className="text-slate-500 max-w-xs mx-auto">
+                10가지 질문으로 알아보는<br/>내 성격에 딱 맞는 미래 아이템
+              </p>
+            </div>
+            {/* 기본 썸네일로 enfp 이미지 사용 */}
+            <img src="/assets/items/enfp.png" alt="미래 아이템" className="w-40 h-40 mx-auto object-cover object-top mask-bottom" />
             <button 
-              onClick={() => window.location.reload()} 
-              className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition"
+              onClick={() => setStep(1)} 
+              className="w-full bg-pink-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg shadow-pink-200 hover:bg-pink-700 transition active:scale-[0.98]"
             >
-              다시 하기
+              테스트 시작하기
             </button>
-            <Link 
-              href="/" 
-              className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold hover:bg-slate-200 transition"
-            >
-              메인으로 가기
-            </Link>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* 질문 단계 */}
+        {step >= 1 && step <= questions.length && (
+          <div className="space-y-8 py-6">
+            {/* 💡 상단 컨트롤 바 (뒤로가기 / 중단) */}
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+              <button 
+                onClick={handleBack} 
+                className="text-sm font-bold text-slate-400 hover:text-slate-800 transition px-2 py-1"
+              >
+                ← 이전
+              </button>
+              <Link 
+                href="/" 
+                className="text-sm font-bold text-slate-400 hover:text-red-500 transition px-2 py-1"
+              >
+                ✕ 중단
+              </Link>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-pink-500 font-bold">진행도: {step} / {questions.length}</p>
+              <h2 className="text-2xl font-black leading-snug">{questions[step - 1].text}</h2>
+            </div>
+            
+            <div className="space-y-4">
+              {questions[step - 1].options.map((opt, i) => (
+                <button 
+                  key={i} 
+                  onClick={() => handleOptionClick(opt.value)} 
+                  className="w-full p-6 bg-slate-50 rounded-2xl font-bold text-left border border-slate-100 hover:bg-pink-50 hover:border-pink-200 hover:text-pink-800 transition-all active:scale-[0.98]"
+                >
+                  {opt.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 로딩 단계 */}
+        {step === analysisStep && (
+          <div className="space-y-8 py-16 flex flex-col items-center justify-center">
+            <div className="w-20 h-20 border-8 border-slate-100 border-t-pink-500 rounded-full animate-spin"></div>
+            <p className="text-2xl font-black text-slate-800 mt-6">
+              미래 설계도<br/>분석 중...
+            </p>
+          </div>
+        )}
+
+        {/* 결과 단계 */}
+        {step === resultStep && result && results[result] && (
+          <div className="text-center space-y-6 py-6">
+            <h1 className="text-2xl font-black text-slate-800">당신의 미래 인생템은?</h1>
+            <div className="w-40 h-40 mx-auto rounded-3xl overflow-hidden border-4 border-slate-50 relative shadow-inner">
+               <img 
+                 src={results[result].img} 
+                 alt={results[result].item}
+                 className="w-full h-full object-cover object-top" 
+                 style={{ 
+                   maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', 
+                   WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' 
+                 }} 
+               />
+            </div>
+            <div className="space-y-2">
+              <p className="text-pink-900 bg-pink-50 inline-block px-3 py-1 rounded-md text-sm font-bold tracking-wider">{result}</p>
+              <h2 className="text-3xl font-black text-pink-600">{results[result].item}</h2>
+            </div>
+            
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-left">
+              <p className="text-slate-700 break-keep leading-relaxed font-medium">
+                {results[result].desc}
+              </p>
+            </div>
+            
+            <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
+              <button 
+                onClick={() => window.location.reload()} 
+                className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition active:scale-[0.98]"
+              >
+                다시 하기
+              </button>
+              <Link 
+                href="/" 
+                className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold hover:bg-slate-200 transition active:scale-[0.98]"
+              >
+                메인으로 가기
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

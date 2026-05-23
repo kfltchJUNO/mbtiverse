@@ -6,7 +6,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
-// 🍎 1. 결과 데이터 (16가지 MBTI 상세 데이터)
+// 🍎 1. 결과 데이터
 const results: Record<string, { fruit: string; desc: string; emoji: string; partner: string; enemy: string; img: string }> = {
   ENFJ: { fruit: "따뜻한 오렌지", desc: "주변을 밝히는 햇살 같은 에너지의 소유자!", emoji: "🍊", partner: "INFP", enemy: "ISTP", img: "/assets/fruits/오렌지.png" },
   ENFP: { fruit: "톡톡 튀는 레몬", desc: "상큼하고 에너지가 넘치는 인간 비타민!", emoji: "🍋", partner: "INTJ", enemy: "ISTJ", img: "/assets/fruits/레몬.png" },
@@ -44,13 +44,25 @@ const questions = [
 
 export default function FruitTest() {
   const [step, setStep] = useState(0);
-  const [scores, setScores] = useState({ E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 });
+  const [answers, setAnswers] = useState<string[]>([]); // 💡 누적 점수 대신 선택 기록을 배열로 저장
   const [mbtiResult, setMbtiResult] = useState("");
   
   const { user } = useAuthGuard();
 
+  // 💡 뒤로 가기 기능
+  const handleBack = () => {
+    if (step === 1) {
+      setStep(0);
+      setAnswers([]);
+    } else if (step > 1 && step <= questions.length) {
+      setStep(step - 1);
+      setAnswers((prev) => prev.slice(0, -1)); // 배열의 마지막 항목 삭제
+    }
+  };
+
   const handleOptionClick = (value: string) => {
-    setScores((prev) => ({ ...prev, [value]: prev[value as keyof typeof prev] + 1 }));
+    const newAnswers = [...answers, value];
+    setAnswers(newAnswers);
     
     if (step < questions.length) {
       setStep(step + 1);
@@ -58,22 +70,19 @@ export default function FruitTest() {
       setStep(questions.length + 1); 
       
       setTimeout(async () => {
-        const { E, I, S, N, T, F, J, P } = scores;
-        const currentE = value === "E" ? E + 1 : E;
-        const currentI = value === "I" ? I + 1 : I;
-        const currentS = value === "S" ? S + 1 : S;
-        const currentN = value === "N" ? N + 1 : N;
-        const currentT = value === "T" ? T + 1 : T;
-        const currentF = value === "F" ? F + 1 : F;
-        const currentJ = value === "J" ? J + 1 : J;
-        const currentP = value === "P" ? P + 1 : P;
+        // 결과 계산 로직
+        const counts: Record<string, number> = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+        newAnswers.forEach((val) => {
+          if (counts[val] !== undefined) counts[val]++;
+        });
 
         const calculatedMBTI = 
-          `${currentE >= currentI ? "E" : "I"}${currentS >= currentN ? "S" : "N"}${currentT >= currentF ? "T" : "F"}${currentJ >= currentP ? "J" : "P"}`;
+          `${counts.E >= counts.I ? "E" : "I"}${counts.S >= counts.N ? "S" : "N"}${counts.T >= counts.F ? "T" : "F"}${counts.J >= counts.P ? "J" : "P"}`;
 
         setMbtiResult(calculatedMBTI);
         setStep(questions.length + 2);
 
+        // 결과 저장 로직
         if (user) {
           try {
             await addDoc(collection(db, "testHistory"), {
@@ -97,6 +106,7 @@ export default function FruitTest() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center relative overflow-hidden">
+        {/* 상단 프로그레스 바 */}
         {step >= 1 && step <= questions.length && (
           <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
             <div 
@@ -106,6 +116,7 @@ export default function FruitTest() {
           </div>
         )}
 
+        {/* 0단계: 인트로 */}
         {step === 0 && (
           <div className="space-y-10 py-6">
             <div className="space-y-4">
@@ -129,8 +140,25 @@ export default function FruitTest() {
           </div>
         )}
 
+        {/* 질문 단계 */}
         {step >= 1 && step <= questions.length && (
-          <div className="space-y-12 py-6">
+          <div className="space-y-8 py-6">
+            {/* 💡 상단 컨트롤 바 (뒤로가기 / 중단) */}
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+              <button 
+                onClick={handleBack} 
+                className="text-sm font-bold text-slate-400 hover:text-slate-800 transition px-2 py-1"
+              >
+                ← 이전
+              </button>
+              <Link 
+                href="/" 
+                className="text-sm font-bold text-slate-400 hover:text-red-500 transition px-2 py-1"
+              >
+                ✕ 중단
+              </Link>
+            </div>
+
             <div className="space-y-4">
               <span className="text-sm font-bold text-indigo-500">
                 Q {step} / {questions.length}
@@ -153,6 +181,7 @@ export default function FruitTest() {
           </div>
         )}
 
+        {/* 로딩 단계 */}
         {step === analysisStep && (
           <div className="space-y-8 py-16 flex flex-col items-center justify-center">
             <div className="w-20 h-20 border-8 border-slate-100 border-t-indigo-500 rounded-full animate-spin"></div>
@@ -162,6 +191,7 @@ export default function FruitTest() {
           </div>
         )}
 
+        {/* 결과 단계 */}
         {step === resultStep && mbtiResult && results[mbtiResult] && (
           <div className="space-y-10 py-6">
             <div className="space-y-3">

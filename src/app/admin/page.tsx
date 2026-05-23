@@ -64,23 +64,23 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">MBTI 콘텐츠 생성 스튜디오 🔐</h1>
-      
-      <div className="flex flex-col gap-4 mb-8 bg-gray-50 p-6 rounded-lg border shadow-sm">
+    <div className="max-w-5xl mx-auto pb-12">
+      {/* 💡 기존 흰색 톤에서 다크 테마(어드민 레이아웃과 동일)에 맞춰 색상 변경 */}
+      <div className="flex flex-col gap-4 mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+        
         {/* 키워드 및 대본 생성 영역 */}
         <div className="flex gap-4">
           <input 
             type="text" 
             placeholder="주제 키워드 (예: 카톡 안 읽씹할 때)" 
-            className="flex-1 p-3 border rounded-md"
+            className="flex-1 p-4 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
           <button 
             onClick={handleGenerate} 
             disabled={loading}
-            className="bg-blue-600 text-white px-6 py-3 rounded-md font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? "생성 중..." : "대본 생성"}
           </button>
@@ -88,18 +88,18 @@ export default function AdminDashboard() {
 
         {/* 결과가 있을 때만 나타나는 발행 영역 */}
         {results.length > 0 && (
-          <div className="flex gap-4 mt-4 pt-4 border-t border-gray-200">
+          <div className="flex gap-4 mt-4 pt-6 border-t border-slate-700">
             <input 
               type="text" 
               placeholder="메인 화면에 보여줄 제목 (예: MBTI별 카톡 안 읽씹할 때)" 
-              className="flex-1 p-3 border-2 border-green-300 rounded-md outline-none focus:border-green-500"
+              className="flex-1 p-4 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-500"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
             <button 
               onClick={handlePublish} 
               disabled={isSaving}
-              className="bg-green-600 text-white px-6 py-3 rounded-md font-medium hover:bg-green-700 disabled:opacity-50 shadow-md transition-colors whitespace-nowrap"
+              className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-md transition-colors whitespace-nowrap"
             >
               {isSaving ? "저장 중..." : "🚀 라이브 발행하기"}
             </button>
@@ -109,23 +109,27 @@ export default function AdminDashboard() {
 
       {/* 16개 MBTI 결과 렌더링 카드 */}
       {results.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {results.map((item) => (
-            <div key={item.mbti} className="border rounded-lg p-5 shadow-sm bg-white">
-              <h3 className="text-xl font-bold text-blue-600 mb-3">{item.mbti}</h3>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4 bg-gray-50 p-3 rounded h-32 overflow-y-auto">
+            <div key={item.mbti} className="border border-slate-700 rounded-2xl p-6 shadow-sm bg-slate-800 flex flex-col h-full">
+              <h3 className="text-xl font-black text-indigo-400 mb-4">{item.mbti}</h3>
+              
+              {/* 대본 출력 텍스트 박스: bg-slate-900 적용하여 글씨가 잘 보이도록 처리 */}
+              <div className="flex-1 text-sm text-slate-200 whitespace-pre-wrap mb-4 bg-slate-900 p-4 rounded-xl border border-slate-700 h-48 overflow-y-auto leading-relaxed font-medium">
                 {item.script}
-              </p>
-              <div className="flex flex-col gap-2">
+              </div>
+              
+              <div className="flex flex-col gap-3 mt-auto">
                 <button 
                   onClick={() => copyToClipboard(item.script)}
-                  className="w-full bg-gray-900 text-white py-2 rounded text-sm hover:bg-gray-800 transition-colors"
+                  className="w-full bg-slate-700 text-white py-3 rounded-xl text-sm font-bold hover:bg-slate-600 transition-colors flex justify-center items-center gap-2"
                 >
-                  📝 대본 복사 (일레븐랩스용)
+                  <span>📝</span> 대본 복사 (ElevenLabs)
                 </button>
-                <div className="text-xs text-gray-500 mt-2 p-2 bg-gray-50 rounded">
-                  <strong className="block mb-1 text-gray-700">Imagen 3 프롬프트:</strong>
-                  <p className="line-clamp-3">{item.imagePrompt}</p>
+                
+                <div className="text-xs text-slate-400 mt-2 p-3 bg-slate-900 rounded-xl border border-slate-700">
+                  <strong className="block mb-1 text-indigo-300">Imagen 3 프롬프트:</strong>
+                  <p className="line-clamp-3 leading-relaxed">{item.imagePrompt}</p>
                 </div>
               </div>
             </div>
