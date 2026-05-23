@@ -7,9 +7,16 @@ import { db } from "../../../lib/firebase";
 export default function PostDetail({ params }: { params: { id: string } }) {
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMBTI, setSelectedMBTI] = useState<string>("ALL"); // 💡 초기값 ALL
+  const [selectedMBTI, setSelectedMBTI] = useState<string>("ALL");
 
   useEffect(() => {
+    // 💡 페이지 로드 시 광고 스크립트 실행
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      console.error("AdSense push error:", e);
+    }
+
     async function fetchPost() {
       const docRef = doc(db, "posts", params.id);
       const docSnap = await getDoc(docRef);
@@ -24,7 +31,6 @@ export default function PostDetail({ params }: { params: { id: string } }) {
   if (loading) return <div className="text-center mt-32">로딩 중...</div>;
   if (!post) return <div className="text-center mt-32 text-gray-500">글을 찾을 수 없습니다 😢</div>;
 
-  // 💡 선택된 MBTI에 따른 필터링 로직
   const filteredContents = selectedMBTI === "ALL" 
     ? post.contents 
     : post.contents.filter((item: any) => item.mbti === selectedMBTI);
@@ -35,7 +41,6 @@ export default function PostDetail({ params }: { params: { id: string } }) {
         {post.title}
       </h1>
 
-      {/* 💡 MBTI 선택 버튼 그룹 */}
       <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 py-4 mb-8 border-b border-gray-100 flex flex-wrap gap-2">
         <button 
           onClick={() => setSelectedMBTI("ALL")}
@@ -54,8 +59,14 @@ export default function PostDetail({ params }: { params: { id: string } }) {
         ))}
       </div>
       
-      <div className="w-full h-24 bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mb-10 rounded-lg text-sm">
-        Google AdSense (상단 배너)
+      {/* 💡 상단 광고 영역 */}
+      <div className="mb-10">
+        <ins className="adsbygoogle"
+             style={{ display: 'block' }}
+             data-ad-client="ca-pub-4585319125929329"
+             data-ad-slot="5169920440"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
       </div>
 
       <div className="prose prose-blue max-w-none space-y-12">
@@ -71,8 +82,14 @@ export default function PostDetail({ params }: { params: { id: string } }) {
         ))}
       </div>
 
-      <div className="w-full h-24 bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mt-16 mb-20 rounded-lg text-sm">
-        Google AdSense (하단 배너)
+      {/* 💡 하단 광고 영역 */}
+      <div className="mt-16 mb-20">
+        <ins className="adsbygoogle"
+             style={{ display: 'block' }}
+             data-ad-client="ca-pub-4585319125929329"
+             data-ad-slot="2543757105"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
       </div>
     </article>
   );
