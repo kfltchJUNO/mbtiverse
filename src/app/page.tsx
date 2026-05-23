@@ -153,7 +153,7 @@ export default function Home() {
             <ins className="adsbygoogle"
                  style={{ display: 'block', minHeight: '300px' }}
                  data-ad-client="ca-pub-4585319125929329"
-                 data-ad-slot="여기에_발급받은_슬롯_번호를_입력하세요"
+                 data-ad-slot="5361492130"
                  data-ad-format="auto"
                  data-full-width-responsive="true"></ins>
           </div>
