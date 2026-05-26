@@ -1,67 +1,169 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  collection, doc, query, orderBy, onSnapshot,
-  addDoc, serverTimestamp, getDoc,
-} from "firebase/firestore";
-import { db } from "../../../lib/firebase";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import Link from "next/link";
+import { collection, getDocs, doc, getDoc, query, orderBy, limit } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { useAuthGuard } from "../../hooks/useAuthGuard";
+import { ALL_CHARACTERS, MALE_CHARACTERS, FEMALE_CHARACTERS, type Character } from "../../lib/characters";
 
-// ─────────────────────────────────────────────
-// 캐릭터 메타데이터 (UI 표시용)
-// ─────────────────────────────────────────────
-const CHARACTER_META: Record<string, { name: string; emoji: string; color: string; bgColor: string }> = {
-  ENFJ: { name: "지우", emoji: "🌟", color: "text-orange-600", bgColor: "bg-orange-50 border-orange-200" },
-  ENFP: { name: "하람", emoji: "✨", color: "text-yellow-600", bgColor: "bg-yellow-50 border-yellow-200" },
-  ENTJ: { name: "준혁", emoji: "🔥", color: "text-red-600", bgColor: "bg-red-50 border-red-200" },
-  ENTP: { name: "도현", emoji: "💡", color: "text-blue-600", bgColor: "bg-blue-50 border-blue-200" },
-  ESFJ: { name: "수현", emoji: "🌸", color: "text-pink-600", bgColor: "bg-pink-50 border-pink-200" },
-  ESFP: { name: "예린", emoji: "💃", color: "text-fuchsia-600", bgColor: "bg-fuchsia-50 border-fuchsia-200" },
-  ESTJ: { name: "민준", emoji: "🏆", color: "text-slate-700", bgColor: "bg-slate-100 border-slate-300" },
-  ESTP: { name: "재원", emoji: "⚡", color: "text-amber-600", bgColor: "bg-amber-50 border-amber-200" },
-  INFJ: { name: "서아", emoji: "🔮", color: "text-purple-600", bgColor: "bg-purple-50 border-purple-200" },
-  INFP: { name: "윤아", emoji: "🌙", color: "text-indigo-600", bgColor: "bg-indigo-50 border-indigo-200" },
-  INTJ: { name: "현우", emoji: "🧠", color: "text-cyan-700", bgColor: "bg-cyan-50 border-cyan-200" },
-  INTP: { name: "태양", emoji: "🔭", color: "text-teal-600", bgColor: "bg-teal-50 border-teal-200" },
-  ISFJ: { name: "다은", emoji: "🍀", color: "text-green-600", bgColor: "bg-green-50 border-green-200" },
-  ISFP: { name: "민서", emoji: "🎨", color: "text-rose-600", bgColor: "bg-rose-50 border-rose-200" },
-  ISTJ: { name: "성호", emoji: "📋", color: "text-zinc-700", bgColor: "bg-zinc-100 border-zinc-300" },
-  ISTP: { name: "강혁", emoji: "🔧", color: "text-stone-600", bgColor: "bg-stone-100 border-stone-300" },
-};
+type GenderTab = "all" | "male" | "female";
 
-interface Message {
-  id?: string;
-  role: "user" | "assistant";
-  type: "text" | "image";
-  content: string;
+// 캐릭터 카드 컴포넌트
+function CharacterCard({
+  character,
+  imageUrl,
+  messageCount,
+  rank,
+}: {
+  character: Character;
   imageUrl?: string;
-  createdAt?: any;
+  messageCount: number;
+  rank?: number;
+}) {
+  const router = useRouter();
+
+  return (
+    <div
+      onClick={() => router.push(`/chat/${character.id}`)}
+      className="group relative cursor-pointer rounded-2xl overflow-hidden border border-white/10 hover:border-white/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+    >
+      {/* 배경 그라디언트 */}
+      <div className={`absolute inset-0 bg-gradient-to-br ${character.gradient} opacity-90`} />
+
+      {/* 인기 랭킹 배지 */}
+      {rank && rank <= 3 && (
+        <div className={`absolute top-3 left-3 z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shadow-lg
+          ${rank === 1 ? "bg-yellow-400 text-yellow-900" : rank === 2 ? "bg-slate-300 text-slate-700" : "bg-amber-600 text-amber-100"}`}>
+          {rank}
+        </div>
+      )}
+
+      {/* 캐릭터 이미지 or 이모지 플레이스홀더 */}
+      <div className="relative h-52 overflow-hidden">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={character.name}
+            className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-7xl opacity-60 group-hover:scale-110 transition-transform duration-300">
+              {character.emoji}
+            </span>
+          </div>
+        )}
+        {/* 하단 그라디언트 오버레이 */}
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent" />
+      </div>
+
+      {/* 캐릭터 정보 */}
+      <div className="relative p-4">
+        <div className="flex items-end justify-between mb-1">
+          <div>
+            <span className="text-white/50 text-xs font-mono tracking-widest">{character.id}</span>
+            <h3 className="text-white font-black text-lg leading-tight">
+              {character.name}
+              <span className="text-white/40 text-xs font-normal ml-1.5">{character.romanName}</span>
+            </h3>
+          </div>
+          <span className="text-2xl">{character.emoji}</span>
+        </div>
+
+        <p className="text-white/60 text-xs mb-3 leading-relaxed line-clamp-1">
+          {character.job}
+        </p>
+
+        <p className="text-white/80 text-xs leading-relaxed line-clamp-2 mb-3">
+          {character.appeal}
+        </p>
+
+        {/* 태그 */}
+        <div className="flex flex-wrap gap-1 mb-3">
+          {character.tags.filter(t => !["남성","여성"].includes(t) && t !== character.id).slice(0, 2).map(tag => (
+            <span key={tag} className="px-2 py-0.5 bg-white/10 rounded-full text-white/60 text-[10px] font-medium">
+              #{tag}
+            </span>
+          ))}
+        </div>
+
+        {/* 대화 수 */}
+        <div className="flex items-center justify-between">
+          <span className="text-white/40 text-[10px]">
+            💬 {messageCount.toLocaleString()}번의 대화
+          </span>
+          <span className={`text-xs font-bold ${character.accentColor} group-hover:underline`}>
+            대화하기 →
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-const FREE_DAILY_MESSAGES = 5; // 하루 무료 메시지 수
+// 인기 랭킹 TOP3 배너
+function RankingBanner({
+  rankings,
+  imageMap,
+}: {
+  rankings: { character: Character; count: number; rank: number }[];
+  imageMap: Record<string, string>;
+}) {
+  if (rankings.length === 0) return null;
 
-export default function ChatPage({ params }: { params: { characterId: string } }) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">🏆</span>
+        <h2 className="text-white font-black text-lg">이번 주 인기 랭킹</h2>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {rankings.slice(0, 3).map(({ character, count, rank }) => (
+          <Link
+            key={character.id}
+            href={`/chat/${character.id}`}
+            className="group relative rounded-xl overflow-hidden border border-white/10 hover:border-white/30 transition-all hover:-translate-y-0.5"
+          >
+            <div className={`absolute inset-0 bg-gradient-to-br ${character.gradient}`} />
+            <div className="relative p-3 flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-full flex-shrink-0 overflow-hidden border-2
+                ${rank === 1 ? "border-yellow-400" : rank === 2 ? "border-slate-300" : "border-amber-600"}`}>
+                {imageMap[character.id] ? (
+                  <img src={imageMap[character.id]} alt={character.name} className="w-full h-full object-cover object-top" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-white/10 text-sm">{character.emoji}</div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className={`text-xs font-black
+                    ${rank === 1 ? "text-yellow-400" : rank === 2 ? "text-slate-300" : "text-amber-500"}`}>
+                    #{rank}
+                  </span>
+                  <span className="text-white font-bold text-sm truncate">{character.name}</span>
+                </div>
+                <p className="text-white/40 text-[10px]">{count.toLocaleString()}회</p>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function ChatSelectPage() {
+  const { user, profile, loading, loginWithGoogle } = useAuthGuard();
   const router = useRouter();
-  const { user, profile, loading, isAdmin } = useAuthGuard();
-  const characterId = params.characterId.toUpperCase();
-  const meta = CHARACTER_META[characterId];
+  const [genderTab, setGenderTab] = useState<GenderTab>("all");
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
+  const [messageCounts, setMessageCounts] = useState<Record<string, number>>({});
+  const [rankings, setRankings] = useState<{ character: Character; count: number; rank: number }[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [dailyCount, setDailyCount] = useState(0);
-
-  // 사진 요청 모달 상태
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [photoRequest, setPhotoRequest] = useState("");
-  const [isRequesting, setIsRequesting] = useState(false);
-
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const roomId = user ? `${user.uid}_${characterId}` : null;
-
-  // ── 로그인 체크 ──
+  // 로그인 체크
   useEffect(() => {
     if (!loading && !user) {
       alert("로그인이 필요한 서비스입니다.");
@@ -69,338 +171,139 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     }
   }, [loading, user, router]);
 
-  // ── 채팅 메시지 실시간 구독 ──
+  // 캐릭터 이미지 + 메시지 카운트 로드
   useEffect(() => {
-    if (!roomId) return;
+    if (!user) return;
 
-    const messagesRef = collection(db, "chat_rooms", roomId, "messages");
-    const q = query(messagesRef, orderBy("createdAt", "asc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Message[];
-      setMessages(msgs);
-    });
-
-    return () => unsubscribe();
-  }, [roomId]);
-
-  // ── 오늘 대화 수 로드 ──
-  useEffect(() => {
-    if (!roomId) return;
-    const key = `chat_daily_${roomId}_${new Date().toDateString()}`;
-    setDailyCount(Number(localStorage.getItem(key) || "0"));
-  }, [roomId]);
-
-  // ── 스크롤 자동 이동 ──
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const getFreeSlotsLeft = () => Math.max(0, FREE_DAILY_MESSAGES - dailyCount);
-  const stellaPerMessage = 2;
-
-  const canSend = () => {
-    if (isAdmin) return true; // 어드민 무제한
-    if (getFreeSlotsLeft() > 0) return true;
-    return (profile?.stella || 0) >= stellaPerMessage;
-  };
-
-  // ── 메시지 전송 ──
-  const handleSend = async () => {
-    if (!input.trim() || isSending || !user || !roomId) return;
-    if (!canSend()) {
-      alert(`오늘 무료 대화(${FREE_DAILY_MESSAGES}회)를 모두 사용했습니다.\n추가 대화는 ${stellaPerMessage} 스텔라가 차감됩니다.\n스텔라를 충전해주세요.`);
-      return;
-    }
-
-    const userMessage: Message = {
-      role: "user",
-      type: "text",
-      content: input.trim(),
-    };
-
-    setInput("");
-    setIsSending(true);
-
-    // Firestore에 유저 메시지 저장
-    await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
-      ...userMessage,
-      createdAt: serverTimestamp(),
-    });
-
-    // 일일 카운트 업데이트
-    const todayKey = `chat_daily_${roomId}_${new Date().toDateString()}`;
-    const newCount = dailyCount + 1;
-    setDailyCount(newCount);
-    localStorage.setItem(todayKey, String(newCount));
-
-    try {
-      // 최근 10개 메시지만 컨텍스트로 전송 (토큰 절약)
-      const contextMessages = [
-        ...messages.slice(-9).map((m) => ({
-          role: m.role,
-          content: m.type === "image" ? "[이미지]" : m.content,
-        })),
-        { role: "user", content: userMessage.content },
-      ];
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          characterId,
-          messages: contextMessages,
-          userId: user.uid,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        // Firestore에 AI 응답 저장
-        await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
-          role: "assistant",
-          type: "text",
-          content: data.reply,
-          characterId,
-          createdAt: serverTimestamp(),
+    async function loadData() {
+      setDataLoading(true);
+      try {
+        // 1. 캐릭터 이미지 로드 (Firestore character_profiles 컬렉션)
+        const imgSnap = await getDocs(collection(db, "character_profiles"));
+        const imgs: Record<string, string> = {};
+        imgSnap.docs.forEach(d => {
+          const data = d.data();
+          if (data.imageUrl) imgs[d.id] = data.imageUrl;
         });
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err: any) {
-      await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
-        role: "assistant",
-        type: "text",
-        content: "잠깐, 지금 연결이 좀 불안정해. 조금 있다가 다시 말해줄게.",
-        characterId,
-        createdAt: serverTimestamp(),
-      });
-    }
+        setImageMap(imgs);
 
-    setIsSending(false);
-  };
-
-  // ── 사진 요청 ──
-  const handlePhotoRequest = async () => {
-    if (!photoRequest.trim() || !user) return;
-    if (!isAdmin && (profile?.stella || 0) < 50) {
-      alert("사진 요청에는 50 스텔라가 필요합니다. 스텔라를 충전해주세요.");
-      return;
-    }
-
-    setIsRequesting(true);
-    try {
-      const res = await fetch("/api/photo-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.uid,
-          characterId,
-          requestText: photoRequest.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        // 채팅방에 요청 안내 메시지 추가
-        if (roomId) {
-          await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
-            role: "assistant",
-            type: "text",
-            content: `📸 사진 요청이 접수됐어! 곧 보내줄게 기대해줘 💌 (50 ⭐ 차감됨)`,
-            characterId,
-            createdAt: serverTimestamp(),
-          });
+        // 2. 대화 수 집계 (chat_rooms 컬렉션에서 유저별 메시지 수 추정)
+        // chat_rooms 문서 ID 패턴: {userId}_{characterId}
+        const chatSnap = await getDocs(collection(db, "chat_rooms"));
+        const counts: Record<string, number> = {};
+        
+        for (const chatDoc of chatSnap.docs) {
+          const parts = chatDoc.id.split("_");
+          const characterId = parts[parts.length - 1]; // 마지막 파트가 MBTI 코드
+          if (characterId && characterId.length === 4) {
+            // 메시지 서브컬렉션 수 카운트
+            const msgSnap = await getDocs(collection(db, "chat_rooms", chatDoc.id, "messages"));
+            counts[characterId] = (counts[characterId] || 0) + msgSnap.size;
+          }
         }
-        setPhotoRequest("");
-        setShowPhotoModal(false);
-        alert("사진 요청이 접수되었습니다! 운영자가 확인 후 전달드립니다.");
-      } else {
-        alert("요청 실패: " + data.error);
-      }
-    } catch {
-      alert("네트워크 오류가 발생했습니다.");
-    }
-    setIsRequesting(false);
-  };
+        setMessageCounts(counts);
 
-  // ── 로딩/없는 캐릭터 처리 ──
+        // 3. 랭킹 산출
+        const ranked = ALL_CHARACTERS
+          .map(c => ({ character: c, count: counts[c.id] || 0 }))
+          .sort((a, b) => b.count - a.count)
+          .map((item, idx) => ({ ...item, rank: idx + 1 }));
+        setRankings(ranked);
+
+      } catch (err) {
+        console.error("데이터 로드 실패:", err);
+      }
+      setDataLoading(false);
+    }
+
+    loadData();
+  }, [user]);
+
+  const displayCharacters =
+    genderTab === "all" ? ALL_CHARACTERS :
+    genderTab === "male" ? MALE_CHARACTERS : FEMALE_CHARACTERS;
+
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
-      </div>
-    );
-  }
-
-  if (!meta) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-500">존재하지 않는 캐릭터입니다.</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* ── 헤더 ── */}
-      <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shadow-sm">
-        <button onClick={() => router.back()} className="text-slate-500 hover:text-slate-800 font-bold text-lg">
-          ←
-        </button>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 ${meta.bgColor}`}>
-          {meta.emoji}
-        </div>
-        <div>
-          <h1 className={`font-black text-base ${meta.color}`}>
-            {meta.name} <span className="text-xs text-slate-400 font-normal">{characterId}</span>
-          </h1>
-          <p className="text-xs text-slate-400">
-            {isAdmin ? "👑 관리자 모드 · 무제한" : `무료 ${getFreeSlotsLeft()}/${FREE_DAILY_MESSAGES}회 남음 · 잔액 ${profile?.stella || 0} ⭐`}
-          </p>
-        </div>
-
-        {/* 사진 요청 버튼 */}
-        <button
-          onClick={() => setShowPhotoModal(true)}
-          className="ml-auto flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition"
-        >
-          📸 <span>사진 요청</span>
-          <span className="bg-indigo-500 rounded-md px-1.5 py-0.5 text-[10px]">50⭐</span>
-        </button>
-      </header>
-
-      {/* ── 메시지 영역 ── */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full">
-        {messages.length === 0 && (
-          <div className={`text-center p-8 rounded-2xl border ${meta.bgColor} mt-8`}>
-            <div className="text-4xl mb-3">{meta.emoji}</div>
-            <p className={`font-black text-lg ${meta.color}`}>{meta.name}와 대화를 시작해보세요!</p>
-            <p className="text-xs text-slate-500 mt-2">
-              매일 {FREE_DAILY_MESSAGES}회 무료 · 이후 {stellaPerMessage}⭐/회
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <div key={msg.id || idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            {msg.role === "assistant" && (
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${meta.bgColor} flex-shrink-0`}>
-                {meta.emoji}
-              </div>
-            )}
-            <div
-              className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-indigo-600 text-white rounded-tr-sm"
-                  : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm"
-              }`}
-            >
-              {msg.type === "image" && msg.imageUrl ? (
-                <div>
-                  <img
-                    src={msg.imageUrl}
-                    alt="캐릭터 사진"
-                    className="rounded-xl max-w-full mb-2 border border-slate-100"
-                  />
-                  {msg.content && <p>{msg.content}</p>}
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {isSending && (
-          <div className="flex justify-start">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${meta.bgColor}`}>
-              {meta.emoji}
-            </div>
-            <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </main>
-
-      {/* ── 입력 영역 ── */}
-      <footer className="sticky bottom-0 bg-white border-t border-slate-200 p-3 max-w-2xl mx-auto w-full">
-        {!isAdmin && !canSend() && (
-          <div className="text-center text-xs text-amber-600 font-bold mb-2 bg-amber-50 rounded-lg p-2">
-            ⭐ 오늘 무료 대화를 모두 사용했습니다. 스텔라를 충전해주세요.
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={`${meta.name}에게 메시지 보내기...`}
-            className="flex-1 px-4 py-3 bg-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-300"
-            disabled={isSending}
-          />
-          <button
-            onClick={handleSend}
-            disabled={isSending || !input.trim()}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
-          >
-            전송
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* 헤더 */}
+      <div className="sticky top-0 z-20 bg-slate-950/90 backdrop-blur-md border-b border-white/5">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <button onClick={() => router.push("/")} className="text-white/50 hover:text-white text-sm transition">
+            ← 홈
           </button>
-        </div>
-      </footer>
-
-      {/* ── 사진 요청 모달 ── */}
-      {showPhotoModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-black text-slate-800 text-lg">📸 {meta.name}에게 사진 요청</h3>
-              <button onClick={() => setShowPhotoModal(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">×</button>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800">
-              <p className="font-bold mb-1">💡 사진 요청 안내</p>
-              <p>원하는 장면이나 분위기를 자세히 설명해주세요. 운영자가 직접 확인하고 보내드립니다.</p>
-              <p className="mt-1 font-bold">{isAdmin ? "👑 관리자 무료 요청" : `차감: 50 ⭐ (현재 잔액: ${profile?.stella || 0} ⭐)`}</p>
-            </div>
-
-            <textarea
-              value={photoRequest}
-              onChange={(e) => setPhotoRequest(e.target.value)}
-              placeholder="예: 카페에서 커피를 마시며 창밖을 바라보는 모습. 따뜻하고 아늑한 분위기로..."
-              className="w-full h-28 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-300"
-            />
-
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => setShowPhotoModal(false)}
-                className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition"
-              >
-                취소
-              </button>
-              <button
-                onClick={handlePhotoRequest}
-                disabled={isRequesting || !photoRequest.trim() || (!isAdmin && (profile?.stella || 0) < 50)}
-                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
-              >
-                {isRequesting ? "요청 중..." : "50 ⭐ 차감하고 요청"}
-              </button>
-            </div>
+          <h1 className="text-white font-black text-lg">💬 캐릭터 채팅</h1>
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 text-sm font-bold">{profile?.stella || 0} ⭐</span>
           </div>
         </div>
-      )}
+      </div>
+
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* 인기 랭킹 배너 */}
+        {!dataLoading && <RankingBanner rankings={rankings} imageMap={imageMap} />}
+
+        {/* 성별 탭 */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-white font-black text-xl">16인의 캐릭터</h2>
+          <div className="flex gap-1 p-1 bg-white/5 rounded-xl border border-white/10">
+            {(["all", "male", "female"] as GenderTab[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setGenderTab(tab)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  genderTab === tab
+                    ? "bg-white text-slate-900"
+                    : "text-white/50 hover:text-white"
+                }`}
+              >
+                {tab === "all" ? "전체" : tab === "male" ? "👦 남성" : "👩 여성"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 캐릭터 그리드 */}
+        {dataLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-72" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {displayCharacters.map(character => {
+              const rankItem = rankings.find(r => r.character.id === character.id);
+              return (
+                <CharacterCard
+                  key={character.id}
+                  character={character}
+                  imageUrl={imageMap[character.id]}
+                  messageCount={messageCounts[character.id] || 0}
+                  rank={rankItem?.rank}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* 스텔라 안내 */}
+        <div className="mt-10 p-5 rounded-2xl bg-white/5 border border-white/10 text-center">
+          <p className="text-white/50 text-sm">
+            매일 <span className="text-white font-bold">5회 무료</span> 대화 제공 ·
+            이후 <span className="text-amber-400 font-bold">2⭐/회</span> ·
+            맞춤 사진 요청 <span className="text-amber-400 font-bold">50⭐</span>
+          </p>
+          <p className="text-white/30 text-xs mt-1">현재 잔액: {profile?.stella || 0} ⭐</p>
+        </div>
+      </main>
     </div>
   );
 }
