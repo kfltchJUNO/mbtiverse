@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '../../hooks/useAuthGuard';
 
-// 16가지 MBTI 음성 가이드라인 데이터베이스
 const voiceData = {
   ENFJ: { speed: 25, speedLabel: "Slower", stability: 75, stabilityLabel: "More Stable", similarity: 85, similarityLabel: "High", exaggeration: 15, note: "Warm, empathetic, leading, clear pronunciation. Avoid overly dramatic tone." },
   ENFP: { speed: 65, speedLabel: "Faster", stability: 40, stabilityLabel: "Variable", similarity: 70, similarityLabel: "Medium High", exaggeration: 60, note: "Energetic, bright, dynamic pacing. Capture enthusiastic inflections." },
@@ -25,20 +24,24 @@ const voiceData = {
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { loading, isAdmin, logout } = useAuthGuard();
+  const { loading, user, isAdmin, logout } = useAuthGuard();
   const router = useRouter();
-  
-  // MBTI 선택 상태 관리 (기본값 ENFJ)
   const [selectedMBTI, setSelectedMBTI] = useState<keyof typeof voiceData>("ENFJ");
 
   useEffect(() => {
-    if (!loading && !isAdmin) {
-      alert("관리자 권한이 없습니다.");
-      router.push('/');
+    // loading 완료 + 로그인 상태 확인 후에만 권한 체크
+    // user가 null이면 비로그인 → 홈으로
+    // user가 있는데 isAdmin이 false면 → 일반 유저 → 홈으로
+    if (!loading && user !== undefined) {
+      if (!user || !isAdmin) {
+        alert("관리자 권한이 없습니다.");
+        router.push('/');
+      }
     }
-  }, [loading, isAdmin, router]);
+  }, [loading, user, isAdmin, router]);
 
-  if (loading || !isAdmin) {
+  // loading 중이거나 아직 user 확인 전이면 스피너
+  if (loading || !user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
@@ -50,7 +53,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex">
-      {/* 메인 콘텐츠 영역 */}
       <main className="flex-1 p-8 overflow-y-auto">
         <header className="mb-8 border-b border-slate-800 pb-4">
           <h1 className="text-3xl font-black text-indigo-400">MBTIverse Admin Panel</h1>
@@ -58,14 +60,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {children}
       </main>
 
-      {/* 우측 고정 가이드라인 패널 */}
       <aside className="w-[400px] border-l border-slate-700 bg-slate-800 p-6 flex flex-col gap-6 sticky top-0 h-screen overflow-y-auto">
         <h2 className="text-2xl font-bold">Voice Style Guidelines</h2>
-        
-        {/* MBTI 선택 드롭다운 */}
+
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select MBTI Type</label>
-          <select 
+          <select
             value={selectedMBTI}
             onChange={(e) => setSelectedMBTI(e.target.value as keyof typeof voiceData)}
             className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white font-bold focus:outline-none focus:border-indigo-500"
@@ -76,7 +76,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </select>
         </div>
 
-        {/* Speed 가이드 */}
         <div className="space-y-2 mt-2">
           <div className="flex justify-between text-sm">
             <span>Speed</span>
@@ -87,7 +86,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* Stability 가이드 */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Stability</span>
@@ -98,7 +96,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* Similarity 가이드 */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Similarity</span>
@@ -109,7 +106,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* Style Exaggeration 가이드 */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Style Exaggeration</span>
@@ -120,35 +116,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* Voice Notes */}
         <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 text-sm">
           <p className="font-bold mb-1 text-indigo-300">Voice Notes ({selectedMBTI})</p>
           <p className="text-slate-300">{currentGuide.note}</p>
         </div>
 
-        {/* User Tip */}
         <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/50 text-sm">
           <p className="font-bold mb-1">User Tip:</p>
           <p className="text-slate-300">This panel updates for the selected MBTI Type. Use these ratios for voice file generation!</p>
         </div>
 
-        {/* 하단 내비게이션바 */}
         <div className="mt-auto grid grid-cols-4 gap-2 pt-6 border-t border-slate-700">
           <div onClick={() => router.push('/scripts')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📄</span>
-            <span>Archives</span>
+            <span className="text-xl">📄</span> Archives
           </div>
           <div onClick={() => router.push('/admin')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⚙️</span>
-            <span>Generator</span>
-          </div>
-          <div onClick={() => { logout(); router.push('/'); }} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-red-400 transition">
-            <span className="text-xl">➜</span>
-            <span>Logout</span>
+            <span className="text-xl">⚙️</span> Generator
           </div>
           <div onClick={() => router.push('/admin/photo-requests')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📸</span>
-            <span>Requests</span>
+            <span className="text-xl">📸</span> Requests
+          </div>
+          <div onClick={() => { logout(); router.push('/'); }} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-red-400 transition">
+            <span className="text-xl">➜</span> Logout
           </div>
         </div>
       </aside>
