@@ -1,158 +1,202 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { useState, useEffect } from "react";
+import {
+  collection, getDocs, doc, updateDoc,
+  query, orderBy, serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../../../lib/firebase";
 
-const voiceData = {
-  ENFJ: { speed: 25, speedLabel: "Slower", stability: 75, stabilityLabel: "More Stable", similarity: 85, similarityLabel: "High", exaggeration: 15, note: "Warm, empathetic, leading, clear pronunciation. Avoid overly dramatic tone." },
-  ENFP: { speed: 65, speedLabel: "Faster", stability: 40, stabilityLabel: "Variable", similarity: 70, similarityLabel: "Medium High", exaggeration: 60, note: "Energetic, bright, dynamic pacing. Capture enthusiastic inflections." },
-  ENTJ: { speed: 55, speedLabel: "Slightly Fast", stability: 85, stabilityLabel: "Very Stable", similarity: 80, similarityLabel: "High", exaggeration: 25, note: "Confident, authoritative, steady and clear. Professional tone." },
-  ENTP: { speed: 70, speedLabel: "Faster", stability: 45, stabilityLabel: "Variable", similarity: 75, similarityLabel: "Medium High", exaggeration: 55, note: "Witty, engaging, slightly provocative tone. Varied pitch." },
-  ESFJ: { speed: 45, speedLabel: "Moderate", stability: 80, stabilityLabel: "Stable", similarity: 85, similarityLabel: "High", exaggeration: 20, note: "Friendly, welcoming, harmonious and polite." },
-  ESFP: { speed: 60, speedLabel: "Slightly Fast", stability: 35, stabilityLabel: "Highly Variable", similarity: 65, similarityLabel: "Medium", exaggeration: 70, note: "Excited, dramatic, highly expressive. Use lively intonations." },
-  ESTJ: { speed: 50, speedLabel: "Moderate", stability: 90, stabilityLabel: "Very Stable", similarity: 80, similarityLabel: "High", exaggeration: 10, note: "Direct, factual, organized and commanding. No unnecessary emotion." },
-  ESTP: { speed: 65, speedLabel: "Faster", stability: 50, stabilityLabel: "Moderate", similarity: 70, similarityLabel: "Medium High", exaggeration: 45, note: "Action-oriented, bold, persuasive and casual." },
-  INFJ: { speed: 20, speedLabel: "Slower", stability: 70, stabilityLabel: "Stable", similarity: 90, similarityLabel: "Very High", exaggeration: 10, note: "Deep, insightful, calm and gentle. Reflective pausing." },
-  INFP: { speed: 30, speedLabel: "Slower", stability: 55, stabilityLabel: "Moderate", similarity: 85, similarityLabel: "High", exaggeration: 20, note: "Soft, dreamy, sincere. Slight emotional vulnerability in tone." },
-  INTJ: { speed: 40, speedLabel: "Moderate Slow", stability: 85, stabilityLabel: "Very Stable", similarity: 90, similarityLabel: "Very High", exaggeration: 5, note: "Analytical, detached, precise and intellectual." },
-  INTP: { speed: 50, speedLabel: "Moderate", stability: 60, stabilityLabel: "Moderate", similarity: 80, similarityLabel: "High", exaggeration: 15, note: "Thoughtful, slightly hesitant pauses, logical explanation tone." },
-  ISFJ: { speed: 35, speedLabel: "Slower", stability: 85, stabilityLabel: "Very Stable", similarity: 85, similarityLabel: "High", exaggeration: 10, note: "Nurturing, soft-spoken, reliable and warm." },
-  ISFP: { speed: 35, speedLabel: "Slower", stability: 65, stabilityLabel: "Moderate", similarity: 80, similarityLabel: "High", exaggeration: 15, note: "Gentle, easy-going, quiet aesthetic appreciation tone." },
-  ISTJ: { speed: 45, speedLabel: "Moderate", stability: 95, stabilityLabel: "Extremely Stable", similarity: 85, similarityLabel: "High", exaggeration: 0, note: "Factual, traditional, monotone-leaning, extremely clear." },
-  ISTP: { speed: 55, speedLabel: "Slightly Fast", stability: 75, stabilityLabel: "Stable", similarity: 75, similarityLabel: "Medium High", exaggeration: 5, note: "Cool, detached, efficient and straightforward." },
-};
-
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { loading, user, isAdmin, logout } = useAuthGuard();
-  const router = useRouter();
-  const [selectedMBTI, setSelectedMBTI] = useState<keyof typeof voiceData>("ENFJ");
+export default function PostImagesPage() {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [inputUrl, setInputUrl] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
 
   useEffect(() => {
-    // loading 완료 + 로그인 상태 확인 후에만 권한 체크
-    // user가 null이면 비로그인 → 홈으로
-    // user가 있는데 isAdmin이 false면 → 일반 유저 → 홈으로
-    if (!loading && user !== undefined) {
-      if (!user || !isAdmin) {
-        alert("관리자 권한이 없습니다.");
-        router.push('/');
-      }
+    async function load() {
+      const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
     }
-  }, [loading, user, isAdmin, router]);
+    load();
+  }, []);
 
-  // loading 중이거나 아직 user 확인 전이면 스피너
-  if (loading || !user || !isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
+  const handleEdit = (post: any) => {
+    setEditingId(post.id);
+    setInputUrl(post.thumbnailUrl || "");
+    setPreviewError(false);
+  };
 
-  const currentGuide = voiceData[selectedMBTI];
+  const handleSave = async (postId: string) => {
+    if (!inputUrl.trim()) return alert("이미지 URL을 입력해주세요.");
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, "posts", postId), {
+        thumbnailUrl: inputUrl.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      setPosts(prev =>
+        prev.map(p => p.id === postId ? { ...p, thumbnailUrl: inputUrl.trim() } : p)
+      );
+      setEditingId(null);
+      alert("✅ 썸네일이 저장되었습니다.");
+    } catch {
+      alert("저장 중 오류가 발생했습니다.");
+    }
+    setIsSaving(false);
+  };
+
+  const handleRemove = async (postId: string) => {
+    if (!confirm("썸네일을 삭제하시겠습니까?")) return;
+    try {
+      await updateDoc(doc(db, "posts", postId), { thumbnailUrl: "" });
+      setPosts(prev =>
+        prev.map(p => p.id === postId ? { ...p, thumbnailUrl: "" } : p)
+      );
+    } catch {
+      alert("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  const registeredCount = posts.filter(p => p.thumbnailUrl).length;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex">
-      <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-8 border-b border-slate-800 pb-4">
-          <h1 className="text-3xl font-black text-indigo-400">MBTIverse Admin Panel</h1>
-        </header>
-        {children}
-      </main>
-
-      <aside className="w-[400px] border-l border-slate-700 bg-slate-800 p-6 flex flex-col gap-6 sticky top-0 h-screen overflow-y-auto">
-        <h2 className="text-2xl font-bold">Voice Style Guidelines</h2>
-
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select MBTI Type</label>
-          <select
-            value={selectedMBTI}
-            onChange={(e) => setSelectedMBTI(e.target.value as keyof typeof voiceData)}
-            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white font-bold focus:outline-none focus:border-indigo-500"
-          >
-            {Object.keys(voiceData).map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+    <div className="max-w-5xl mx-auto pb-12">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-xl font-black text-slate-100">리포트 썸네일 관리</h2>
+          <p className="text-xs text-slate-400 mt-1">
+            등록됨: <span className="text-emerald-400 font-bold">{registeredCount}</span> / {posts.length}
+          </p>
         </div>
-
-        <div className="space-y-2 mt-2">
-          <div className="flex justify-between text-sm">
-            <span>Speed</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.speedLabel})</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-amber-300 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.speed}%` }}></div>
-          </div>
+        <div className="text-xs text-slate-500 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2">
+          💡 각 리포트 카드·상세 페이지 상단에 표시됩니다
         </div>
+      </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Stability</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.stabilityLabel})</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-teal-400 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.stability}%` }}></div>
-          </div>
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-20 bg-slate-800 rounded-2xl animate-pulse" />
+          ))}
         </div>
+      ) : posts.length === 0 ? (
+        <div className="text-center py-20 text-slate-500 bg-slate-800 rounded-2xl border border-slate-700">
+          발행된 게시물이 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {posts.map(post => {
+            const isEditing = editingId === post.id;
+            const hasImage = !!post.thumbnailUrl;
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Similarity</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.similarityLabel})</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-teal-400 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.similarity}%` }}></div>
-          </div>
-        </div>
+            return (
+              <div
+                key={post.id}
+                className={`bg-slate-800 rounded-2xl border p-4 transition ${
+                  isEditing ? "border-indigo-500" : "border-slate-700"
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  {/* 썸네일 미리보기 */}
+                  <div className="w-20 h-14 rounded-xl overflow-hidden flex-shrink-0 border border-slate-700 bg-slate-900 flex items-center justify-center">
+                    {hasImage ? (
+                      <img
+                        src={post.thumbnailUrl}
+                        alt={post.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-2xl opacity-30">🖼️</span>
+                    )}
+                  </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Style Exaggeration</span>
-            <span className="font-bold">Exaggerated Ratio</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-amber-300 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.exaggeration}%` }}></div>
-          </div>
-        </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-slate-100 text-sm truncate flex-1">
+                        {post.title}
+                      </h3>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                        hasImage
+                          ? "bg-emerald-900 text-emerald-400"
+                          : "bg-slate-700 text-slate-500"
+                      }`}>
+                        {hasImage ? "✓ 등록됨" : "미등록"}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 text-xs mb-2">
+                      {post.keyword && `#${post.keyword} · `}
+                      {post.createdAt?.toDate?.().toLocaleDateString("ko-KR") || ""}
+                    </p>
 
-        <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 text-sm">
-          <p className="font-bold mb-1 text-indigo-300">Voice Notes ({selectedMBTI})</p>
-          <p className="text-slate-300">{currentGuide.note}</p>
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          type="url"
+                          value={inputUrl}
+                          onChange={(e) => {
+                            setInputUrl(e.target.value);
+                            setPreviewError(false);
+                          }}
+                          placeholder="이미지 URL 입력"
+                          className="w-full p-2.5 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                        {inputUrl && !previewError && (
+                          <img
+                            src={inputUrl}
+                            alt="미리보기"
+                            className="h-20 rounded-lg object-cover border border-slate-700"
+                            onError={() => setPreviewError(true)}
+                          />
+                        )}
+                        {previewError && (
+                          <p className="text-red-400 text-xs">⚠️ 유효하지 않은 이미지 URL입니다.</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSave(post.id)}
+                            disabled={isSaving || previewError || !inputUrl.trim()}
+                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-40"
+                          >
+                            {isSaving ? "저장 중..." : "저장"}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="px-4 py-1.5 bg-slate-700 text-white rounded-lg text-xs font-bold transition"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(post)}
+                          className="px-3 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-indigo-300 rounded-lg text-xs font-bold transition border border-indigo-700"
+                        >
+                          {hasImage ? "✏️ 수정" : "➕ 썸네일 등록"}
+                        </button>
+                        {hasImage && (
+                          <button
+                            onClick={() => handleRemove(post.id)}
+                            className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-red-400 rounded-lg text-xs font-bold transition border border-red-800"
+                          >
+                            🗑️ 삭제
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-
-        <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/50 text-sm">
-          <p className="font-bold mb-1">User Tip:</p>
-          <p className="text-slate-300">This panel updates for the selected MBTI Type. Use these ratios for voice file generation!</p>
-        </div>
-
-        <div className="mt-auto grid grid-cols-4 gap-2 pt-6 border-t border-slate-700">
-          <div onClick={() => router.push('/admin')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⚙️</span> Generator
-          </div>
-          <div onClick={() => router.push('/admin/photo-requests')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📸</span> Requests
-          </div>
-          <div onClick={() => router.push('/admin/character-profiles')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🎭</span> Chars
-          </div>
-          <div onClick={() => router.push('/admin/post-images')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🖼️</span> Images
-          </div>
-          <div onClick={() => router.push('/admin/test-builder')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🧪</span> Tests
-          </div>
-          <div onClick={() => router.push('/admin/stella')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⭐</span> Stella
-          </div>
-          <div onClick={() => router.push('/scripts')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📄</span> Scripts
-          </div>
-          <div onClick={() => { logout(); router.push('/'); }} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-red-400 transition">
-            <span className="text-xl">➜</span> Logout
-          </div>
-        </div>
-      </aside>
+      )}
     </div>
   );
 }
