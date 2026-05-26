@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Images",  emoji: "🖼️", path: "/admin/post-images" },
   { label: "Tests",   emoji: "🧪", path: "/admin/test-builder" },
   { label: "Stella",  emoji: "⭐", path: "/admin/stella" },
+  { label: "AutoPic", emoji: "🤖", path: "/admin/auto-photos" },
   { label: "Scripts", emoji: "📄", path: "/scripts" },
 ];
 

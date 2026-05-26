@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection, addDoc, serverTimestamp, getDocs,
-  deleteDoc, doc, query, orderBy, runTransaction, getDoc,
+  deleteDoc, doc, query, orderBy, where, runTransaction, getDoc,
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
@@ -114,20 +114,21 @@ export default function AdminDashboard() {
     setIsSearching(true);
     setFoundUser(null);
     try {
-      // users 컬렉션 전체를 가져와서 클라이언트 필터링
-      // (소규모 서비스이므로 허용. 유저 수 많아지면 이메일 인덱스 쿼리로 전환 권장)
-      const snap = await getDocs(collection(db, "users"));
-      const matched = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .find((u: any) => u.email?.toLowerCase() === searchEmail.trim().toLowerCase());
-
-      if (matched) {
-        setFoundUser(matched);
+      // ✅ where 쿼리로 특정 이메일만 조회 (전체 컬렉션 읽기 방지 + 보안 규칙 통과)
+      const q = query(
+        collection(db, "users"),
+        where("email", "==", searchEmail.trim().toLowerCase())
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        setFoundUser({ id: d.id, ...d.data() });
       } else {
-        alert("해당 이메일로 가입된 유저를 찾을 수 없습니다.");
+        alert("해당 이메일로 가입된 유저를 찾을 수 없습니다.\n\n※ 이메일이 정확한지, 해당 유저가 실제로 로그인한 적 있는지 확인해주세요.");
       }
-    } catch (err) {
-      alert("검색 중 오류가 발생했습니다.");
+    } catch (err: any) {
+      console.error("유저 검색 오류:", err);
+      alert("검색 오류: " + err.message);
     }
     setIsSearching(false);
   };

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection, doc, query, orderBy, onSnapshot,
-  addDoc, serverTimestamp, getDoc,
+  addDoc, serverTimestamp, getDoc, getDocs, where, limit,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -44,7 +44,7 @@ const FREE_DAILY_MESSAGES = 5; // 하루 무료 메시지 수
 
 export default function ChatPage({ params }: { params: { characterId: string } }) {
   const router = useRouter();
-  const { user, profile, loading } = useAuthGuard();
+  const { user, profile, loading, isAdmin } = useAuthGuard();
   const characterId = params.characterId.toUpperCase();
   const meta = CHARACTER_META[characterId];
 
@@ -52,6 +52,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [dailyCount, setDailyCount] = useState(0);
+  const [totalMsgCount, setTotalMsgCount] = useState(0);
 
   // 사진 요청 모달 상태
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -103,8 +104,48 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const stellaPerMessage = 2;
 
   const canSend = () => {
+    if (isAdmin) return true; // 어드민 무제한
     if (getFreeSlotsLeft() > 0) return true;
     return (profile?.stella || 0) >= stellaPerMessage;
+  };
+
+
+  // ── 자동 사진 트리거 체크 ──
+  const checkAutoPhoto = async (msgCount: number) => {
+    if (!roomId || !user) return;
+    try {
+      // 활성화된 자동 사진 중 현재 메시지 수 이하인 것 조회
+      const q = query(
+        collection(db, "auto_photos", characterId, "items"),
+        where("isActive", "==", true),
+        where("triggerCount", "<=", msgCount),
+        orderBy("triggerCount", "desc"),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) return;
+
+      const autoPhoto = snap.docs[0].data();
+
+      // 이미 이 트리거로 보낸 적 있는지 체크 (중복 방지)
+      const sentKey = `auto_photo_sent_${roomId}_${snap.docs[0].id}`;
+      if (localStorage.getItem(sentKey)) return;
+
+      // 채팅방에 자동 사진 전송
+      await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
+        role: "assistant",
+        type: "image",
+        imageUrl: autoPhoto.imageUrl,
+        content: autoPhoto.caption,
+        characterId,
+        isAutoPhoto: true,
+        createdAt: serverTimestamp(),
+      });
+
+      localStorage.setItem(sentKey, "1");
+    } catch (err) {
+      console.error("자동 사진 트리거 오류:", err);
+    }
   };
 
   // ── 메시지 전송 ──
@@ -135,6 +176,10 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     const newCount = dailyCount + 1;
     setDailyCount(newCount);
     localStorage.setItem(todayKey, String(newCount));
+    const newTotal = totalMsgCount + 1;
+    setTotalMsgCount(newTotal);
+    // 자동 사진 트리거 체크 (응답 받은 후 실행)
+    setTimeout(() => checkAutoPhoto(newTotal), 2000);
 
     try {
       // 최근 10개 메시지만 컨텍스트로 전송 (토큰 절약)
@@ -186,7 +231,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   // ── 사진 요청 ──
   const handlePhotoRequest = async () => {
     if (!photoRequest.trim() || !user) return;
-    if ((profile?.stella || 0) < 50) {
+    if (!isAdmin && (profile?.stella || 0) < 50) {
       alert("사진 요청에는 50 스텔라가 필요합니다. 스텔라를 충전해주세요.");
       return;
     }
@@ -260,7 +305,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             {meta.name} <span className="text-xs text-slate-400 font-normal">{characterId}</span>
           </h1>
           <p className="text-xs text-slate-400">
-            무료 {getFreeSlotsLeft()}/{FREE_DAILY_MESSAGES}회 남음 · 잔액 {profile?.stella || 0} ⭐
+            {isAdmin ? "👑 관리자 모드 · 무제한" : `무료 ${getFreeSlotsLeft()}/${FREE_DAILY_MESSAGES}회 남음 · 잔액 ${profile?.stella || 0} ⭐`}
           </p>
         </div>
 
@@ -335,7 +380,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
 
       {/* ── 입력 영역 ── */}
       <footer className="sticky bottom-0 bg-white border-t border-slate-200 p-3 max-w-2xl mx-auto w-full">
-        {!canSend() && (
+        {!isAdmin && !canSend() && (
           <div className="text-center text-xs text-amber-600 font-bold mb-2 bg-amber-50 rounded-lg p-2">
             ⭐ 오늘 무료 대화를 모두 사용했습니다. 스텔라를 충전해주세요.
           </div>
@@ -372,7 +417,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800">
               <p className="font-bold mb-1">💡 사진 요청 안내</p>
               <p>원하는 장면이나 분위기를 자세히 설명해주세요. 운영자가 직접 확인하고 보내드립니다.</p>
-              <p className="mt-1 font-bold">차감: 50 ⭐ (현재 잔액: {profile?.stella || 0} ⭐)</p>
+              <p className="mt-1 font-bold">{isAdmin ? "👑 관리자 무료 요청" : `차감: 50 ⭐ (현재 잔액: ${profile?.stella || 0} ⭐)`}</p>
             </div>
 
             <textarea
@@ -391,7 +436,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
               </button>
               <button
                 onClick={handlePhotoRequest}
-                disabled={isRequesting || !photoRequest.trim() || (profile?.stella || 0) < 50}
+                disabled={isRequesting || !photoRequest.trim() || (!isAdmin && (profile?.stella || 0) < 50)}
                 className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
               >
                 {isRequesting ? "요청 중..." : "50 ⭐ 차감하고 요청"}
