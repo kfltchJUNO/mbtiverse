@@ -1,14 +1,14 @@
+// src/app/api/admin/generate/route.ts
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// ✅ 실제 존재하는 모델명 (2025년 기준)
+// 2025년 기준 실제 사용 가능한 모델 (v1beta API 지원)
 const FALLBACK_MODELS = [
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
+  "gemini-2.5-flash-preview-04-17",
 ];
 
 export async function POST(req: Request) {
@@ -20,7 +20,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "키워드가 없습니다." }, { status: 400 });
     }
 
-    // Vercel 환경변수 누락 체크
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ success: false, error: "GEMINI_API_KEY 환경변수가 설정되지 않았습니다." }, { status: 500 });
     }
@@ -30,15 +29,11 @@ export async function POST(req: Request) {
       : `[작성 스타일: 쇼츠 대본용] 각 MBTI별로 200자 내외의 재치 있고 빠른 템포의 대본을 작성해.`;
 
     const prompt = `
-      너는 MBTI 전문가야. 주제 "${keyword}"에 대해 16가지 MBTI 유형의 반응을 작성해줘.
-      ${styleInstruction}
-      응답은 반드시 아래 JSON 포맷으로만 해줘. 마크다운 코드블록(\`\`\`)이나 다른 기호는 절대 넣지 마. JSON만 반환해.
-      {
-        "contents": [
-          { "mbti": "ENFJ", "script": "...", "imagePrompt": "..." }
-        ]
-      }
-    `;
+너는 MBTI 전문가야. 주제 "${keyword}"에 대해 16가지 MBTI 유형의 반응을 작성해줘.
+${styleInstruction}
+응답은 반드시 아래 JSON 포맷으로만 해줘. 마크다운 코드블록이나 다른 기호는 절대 넣지 마. JSON만 반환해.
+{"contents":[{"mbti":"ENFJ","script":"...","imagePrompt":"..."}]}
+    `.trim();
 
     let responseText = "";
     let lastError = "";
@@ -62,7 +57,7 @@ export async function POST(req: Request) {
       throw new Error(`모든 모델 실패. 마지막 오류: ${lastError}`);
     }
 
-    // JSON 정제 (마크다운 펜스 제거)
+    // JSON 정제
     const cleanedText = responseText
       .replace(/```json\s*/gi, "")
       .replace(/```\s*/gi, "")
@@ -72,7 +67,6 @@ export async function POST(req: Request) {
     try {
       parsedData = JSON.parse(cleanedText);
     } catch {
-      // JSON 파싱 실패 시 {} 앞뒤 추출 재시도
       const match = cleanedText.match(/\{[\s\S]*\}/);
       if (!match) throw new Error("응답에서 JSON을 파싱할 수 없습니다.");
       parsedData = JSON.parse(match[0]);
