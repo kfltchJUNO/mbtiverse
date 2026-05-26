@@ -133,15 +133,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* 하단 내비게이션바 */}
-        <div className="mt-auto grid grid-cols-3 gap-2 pt-6 border-t border-slate-700">
+        <div className="mt-auto grid grid-cols-4 gap-2 pt-6 border-t border-slate-700">
           <div onClick={() => router.push('/scripts')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📄</span> Archives
+            <span className="text-xl">📄</span>
+            <span>Archives</span>
           </div>
           <div onClick={() => router.push('/admin')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⚙️</span> Generator
+            <span className="text-xl">⚙️</span>
+            <span>Generator</span>
           </div>
           <div onClick={() => { logout(); router.push('/'); }} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-red-400 transition">
-            <span className="text-xl">➜</span> Logout
+            <span className="text-xl">➜</span>
+            <span>Logout</span>
+          </div>
+          <div onClick={() => router.push('/admin/photo-requests')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
+            <span className="text-xl">📸</span>
+            <span>Requests</span>
           </div>
         </div>
       </aside>
