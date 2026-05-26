@@ -23,15 +23,28 @@ const voiceData = {
   ISTP: { speed: 55, speedLabel: "Slightly Fast", stability: 75, stabilityLabel: "Stable", similarity: 75, similarityLabel: "Medium High", exaggeration: 5, note: "Cool, detached, efficient and straightforward." },
 };
 
+const NAV_ITEMS = [
+  { label: "Generator", emoji: "⚙️", path: "/admin" },
+  { label: "Requests", emoji: "📸", path: "/admin/photo-requests" },
+  { label: "Chars",    emoji: "🎭", path: "/admin/character-profiles" },
+  { label: "Images",  emoji: "🖼️", path: "/admin/post-images" },
+  { label: "Tests",   emoji: "🧪", path: "/admin/test-builder" },
+  { label: "Stella",  emoji: "⭐", path: "/admin/stella" },
+  { label: "Scripts", emoji: "📄", path: "/scripts" },
+];
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, isAdmin, logout } = useAuthGuard();
   const router = useRouter();
   const [selectedMBTI, setSelectedMBTI] = useState<keyof typeof voiceData>("ENFJ");
 
+  // 사이드바 토글 상태
+  // 데스크탑: 기본 열림 / 모바일: 기본 닫힘
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 음성 가이드라인 섹션 접기/펴기 (모바일용)
+  const [voiceOpen, setVoiceOpen] = useState(true);
+
   useEffect(() => {
-    // loading 완료 + 로그인 상태 확인 후에만 권한 체크
-    // user가 null이면 비로그인 → 홈으로
-    // user가 있는데 isAdmin이 false면 → 일반 유저 → 홈으로
     if (!loading && user !== undefined) {
       if (!user || !isAdmin) {
         alert("관리자 권한이 없습니다.");
@@ -40,119 +53,161 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [loading, user, isAdmin, router]);
 
-  // loading 중이거나 아직 user 확인 전이면 스피너
+  // 라우트 변경 시 모바일 사이드바 자동 닫기
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, []);
+
   if (loading || !user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
       </div>
     );
   }
 
   const currentGuide = voiceData[selectedMBTI];
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-white flex">
-      <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-8 border-b border-slate-800 pb-4">
-          <h1 className="text-3xl font-black text-indigo-400">MBTIverse Admin Panel</h1>
-        </header>
-        {children}
-      </main>
+  const SidebarContent = () => (
+    <div className="flex flex-col gap-5 h-full">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-black text-white">Voice Guidelines</h2>
+        {/* 모바일에서만 닫기 버튼 표시 */}
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="lg:hidden p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition"
+        >
+          ✕
+        </button>
+      </div>
 
-      <aside className="w-[400px] border-l border-slate-700 bg-slate-800 p-6 flex flex-col gap-6 sticky top-0 h-screen overflow-y-auto">
-        <h2 className="text-2xl font-bold">Voice Style Guidelines</h2>
+      {/* MBTI 선택 */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          Select MBTI Type
+        </label>
+        <select
+          value={selectedMBTI}
+          onChange={(e) => setSelectedMBTI(e.target.value as keyof typeof voiceData)}
+          className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white font-bold focus:outline-none focus:border-indigo-500 text-sm"
+        >
+          {Object.keys(voiceData).map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+      </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select MBTI Type</label>
-          <select
-            value={selectedMBTI}
-            onChange={(e) => setSelectedMBTI(e.target.value as keyof typeof voiceData)}
-            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white font-bold focus:outline-none focus:border-indigo-500"
-          >
-            {Object.keys(voiceData).map((type) => (
-              <option key={type} value={type}>{type}</option>
+      {/* 음성 가이드라인 접기/펴기 */}
+      <div>
+        <button
+          onClick={() => setVoiceOpen(v => !v)}
+          className="w-full flex items-center justify-between text-sm font-bold text-slate-300 hover:text-white transition mb-3"
+        >
+          <span>📊 Voice Settings</span>
+          <span className="text-slate-500 text-xs">{voiceOpen ? "▲ 접기" : "▼ 펼치기"}</span>
+        </button>
+
+        {voiceOpen && (
+          <div className="space-y-4">
+            {[
+              { label: "Speed", value: currentGuide.speed, sub: currentGuide.speedLabel, color: "bg-amber-300" },
+              { label: "Stability", value: currentGuide.stability, sub: currentGuide.stabilityLabel, color: "bg-teal-400" },
+              { label: "Similarity", value: currentGuide.similarity, sub: currentGuide.similarityLabel, color: "bg-teal-400" },
+              { label: "Exaggeration", value: currentGuide.exaggeration, sub: "Ratio", color: "bg-amber-300" },
+            ].map(({ label, value, sub, color }) => (
+              <div key={label} className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-300">{label}</span>
+                  <span className="font-bold text-slate-400">{selectedMBTI} · {sub}</span>
+                </div>
+                <div className="w-full bg-slate-900 rounded-full h-3">
+                  <div
+                    className={`${color} h-3 rounded-full transition-all duration-500`}
+                    style={{ width: `${value}%` }}
+                  />
+                </div>
+              </div>
             ))}
-          </select>
-        </div>
 
-        <div className="space-y-2 mt-2">
-          <div className="flex justify-between text-sm">
-            <span>Speed</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.speedLabel})</span>
+            <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 text-xs">
+              <p className="font-bold mb-1 text-indigo-300">Notes ({selectedMBTI})</p>
+              <p className="text-slate-400 leading-relaxed">{currentGuide.note}</p>
+            </div>
           </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-amber-300 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.speed}%` }}></div>
-          </div>
-        </div>
+        )}
+      </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Stability</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.stabilityLabel})</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-teal-400 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.stability}%` }}></div>
-          </div>
+      {/* 네비게이션 */}
+      <div className="mt-auto pt-4 border-t border-slate-700">
+        <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-3 font-bold">Navigation</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          {NAV_ITEMS.map(({ label, emoji, path }) => (
+            <button
+              key={path}
+              onClick={() => { router.push(path); setSidebarOpen(false); }}
+              className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-slate-700 transition text-slate-400 hover:text-indigo-400 cursor-pointer"
+            >
+              <span className="text-lg">{emoji}</span>
+              <span className="text-[9px] font-bold">{label}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => { logout(); router.push('/'); }}
+            className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-slate-700 transition text-slate-400 hover:text-red-400 cursor-pointer"
+          >
+            <span className="text-lg">➜</span>
+            <span className="text-[9px] font-bold">Logout</span>
+          </button>
         </div>
+      </div>
+    </div>
+  );
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Similarity</span>
-            <span className="font-bold">{selectedMBTI} ({currentGuide.similarityLabel})</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-teal-400 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.similarity}%` }}></div>
-          </div>
-        </div>
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Style Exaggeration</span>
-            <span className="font-bold">Exaggerated Ratio</span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-4">
-            <div className="bg-amber-300 h-4 rounded-full transition-all duration-500" style={{ width: `${currentGuide.exaggeration}%` }}></div>
-          </div>
-        </div>
+      {/* ── 모바일 상단 헤더 (lg 미만에서만 표시) ── */}
+      <header className="lg:hidden sticky top-0 z-30 bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+        <h1 className="text-base font-black text-indigo-400">MBTIverse Admin</h1>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-sm font-bold text-slate-300 transition"
+        >
+          <span>☰</span>
+          <span className="text-xs">메뉴</span>
+        </button>
+      </header>
 
-        <div className="bg-slate-900 p-4 rounded-lg border border-slate-700 text-sm">
-          <p className="font-bold mb-1 text-indigo-300">Voice Notes ({selectedMBTI})</p>
-          <p className="text-slate-300">{currentGuide.note}</p>
-        </div>
+      <div className="flex">
+        {/* ── 데스크탑 사이드바 (lg 이상 항상 표시) ── */}
+        <aside className="hidden lg:flex w-[360px] border-r border-slate-700 bg-slate-800 p-6 flex-col sticky top-0 h-screen overflow-y-auto flex-shrink-0">
+          <SidebarContent />
+        </aside>
 
-        <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-500/50 text-sm">
-          <p className="font-bold mb-1">User Tip:</p>
-          <p className="text-slate-300">This panel updates for the selected MBTI Type. Use these ratios for voice file generation!</p>
-        </div>
+        {/* ── 모바일 드로어 오버레이 ── */}
+        {sidebarOpen && (
+          <>
+            {/* 배경 딤 */}
+            <div
+              className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={() => setSidebarOpen(false)}
+            />
+            {/* 드로어 패널 (오른쪽에서 슬라이드) */}
+            <div className="lg:hidden fixed top-0 right-0 z-50 w-[85vw] max-w-sm h-full bg-slate-800 border-l border-slate-700 p-5 overflow-y-auto">
+              <SidebarContent />
+            </div>
+          </>
+        )}
 
-        <div className="mt-auto grid grid-cols-4 gap-2 pt-6 border-t border-slate-700">
-          <div onClick={() => router.push('/admin')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⚙️</span> Generator
-          </div>
-          <div onClick={() => router.push('/admin/photo-requests')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📸</span> Requests
-          </div>
-          <div onClick={() => router.push('/admin/character-profiles')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🎭</span> Chars
-          </div>
-          <div onClick={() => router.push('/admin/post-images')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🖼️</span> Images
-          </div>
-          <div onClick={() => router.push('/admin/test-builder')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">🧪</span> Tests
-          </div>
-          <div onClick={() => router.push('/admin/stella')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">⭐</span> Stella
-          </div>
-          <div onClick={() => router.push('/scripts')} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-indigo-400 transition">
-            <span className="text-xl">📄</span> Scripts
-          </div>
-          <div onClick={() => { logout(); router.push('/'); }} className="text-center text-xs flex flex-col items-center gap-1 cursor-pointer hover:text-red-400 transition">
-            <span className="text-xl">➜</span> Logout
-          </div>
-        </div>
-      </aside>
+        {/* ── 메인 콘텐츠 ── */}
+        <main className="flex-1 p-4 lg:p-8 overflow-y-auto min-w-0">
+          <header className="hidden lg:block mb-8 border-b border-slate-800 pb-4">
+            <h1 className="text-3xl font-black text-indigo-400">MBTIverse Admin Panel</h1>
+          </header>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

@@ -5,11 +5,11 @@ import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { ref, deleteObject } from "firebase/storage";
+import { db, storage } from "../../../lib/firebase";
+import { useStorageUpload } from "../../../hooks/useStorageUpload";
+import ImageUploader from "../../../components/ui/ImageUploader";
 
-// ─────────────────────────────────────────────
-// JSON 스키마 예시 (관리자 가이드용)
-// ─────────────────────────────────────────────
 const JSON_SCHEMA_EXAMPLE = `{
   "title": "나는 어떤 계절 인간일까?",
   "description": "4가지 선택으로 알아보는 나의 계절 유형",
@@ -42,20 +42,26 @@ type Tab = "create" | "manage";
 export default function TestBuilderPage() {
   const [tab, setTab] = useState<Tab>("create");
 
-  // ── 생성 탭 상태 ──
+  // 생성 탭
   const [jsonInput, setJsonInput] = useState("");
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // ── 관리 탭 상태 ──
+  // 관리 탭
   const [tests, setTests] = useState<any[]>([]);
   const [loadingTests, setLoadingTests] = useState(false);
 
-  // ── 결과 이미지 편집 ──
+  // 결과 이미지 편집
   const [editingTest, setEditingTest] = useState<any>(null);
-  const [resultImages, setResultImages] = useState<Record<string, string>>({});
+  // resultFiles: { [resultId]: File | null }
+  const [resultFiles, setResultFiles] = useState<Record<string, File | null>>({});
+  // resultUrls: 현재 저장된 URL (편집 중 미리보기용)
+  const [resultUrls, setResultUrls] = useState<Record<string, string>>({});
   const [isSavingImages, setIsSavingImages] = useState(false);
+  const [uploadingResultId, setUploadingResultId] = useState<string | null>(null);
+
+  const { uploadFile, uploadState, reset: resetUpload } = useStorageUpload();
 
   useEffect(() => {
     if (tab === "manage") fetchTests();
@@ -69,34 +75,26 @@ export default function TestBuilderPage() {
     setLoadingTests(false);
   };
 
-  // JSON 파싱 및 유효성 검사
   const handleParse = () => {
     setParseError("");
     setParsed(null);
     try {
       const data = JSON.parse(jsonInput);
-
-      // 필수 필드 검사
       if (!data.title) throw new Error("title 필드가 없습니다.");
-      if (!data.slug) throw new Error("slug 필드가 없습니다. (URL 경로에 사용)");
+      if (!data.slug) throw new Error("slug 필드가 없습니다.");
       if (!Array.isArray(data.questions) || data.questions.length === 0)
         throw new Error("questions 배열이 비어있습니다.");
       if (!Array.isArray(data.results) || data.results.length === 0)
         throw new Error("results 배열이 비어있습니다.");
-
-      // 각 질문 검사
       data.questions.forEach((q: any, i: number) => {
         if (!q.text) throw new Error(`questions[${i}].text가 없습니다.`);
         if (!Array.isArray(q.options) || q.options.length < 2)
           throw new Error(`questions[${i}].options가 2개 이상이어야 합니다.`);
       });
-
-      // 각 결과 검사
       data.results.forEach((r: any, i: number) => {
         if (!r.id) throw new Error(`results[${i}].id가 없습니다.`);
         if (!r.name) throw new Error(`results[${i}].name이 없습니다.`);
       });
-
       setParsed(data);
     } catch (err: any) {
       setParseError(err.message);
@@ -115,6 +113,7 @@ export default function TestBuilderPage() {
       alert(`✅ "${parsed.title}" 테스트가 발행되었습니다!\n경로: /test/${parsed.slug}`);
       setJsonInput("");
       setParsed(null);
+      if (tab === "manage") fetchTests();
     } catch {
       alert("발행 중 오류가 발생했습니다.");
     }
@@ -131,36 +130,59 @@ export default function TestBuilderPage() {
     }
   };
 
-  // 결과 이미지 편집 열기
   const openImageEditor = (test: any) => {
     setEditingTest(test);
-    const imgMap: Record<string, string> = {};
+    const files: Record<string, File | null> = {};
+    const urls: Record<string, string> = {};
     (test.results || []).forEach((r: any) => {
-      imgMap[r.id] = r.imageUrl || "";
+      files[r.id] = null;
+      urls[r.id] = r.imageUrl || "";
     });
-    setResultImages(imgMap);
+    setResultFiles(files);
+    setResultUrls(urls);
+    resetUpload();
   };
 
-  // 결과 이미지 일괄 저장
+  // 결과 이미지 일괄 저장 (파일 선택된 항목만 업로드)
   const handleSaveImages = async () => {
     if (!editingTest) return;
     setIsSavingImages(true);
     try {
-      const updatedResults = editingTest.results.map((r: any) => ({
-        ...r,
-        imageUrl: resultImages[r.id] || "",
-      }));
+      const updatedResults = [...editingTest.results];
+
+      for (const result of updatedResults) {
+        const file = resultFiles[result.id];
+        if (!file) continue; // 파일 선택 안 된 건 기존 URL 유지
+
+        setUploadingResultId(result.id);
+
+        // 기존 이미지 삭제
+        if (result.imageUrl) {
+          try { await deleteObject(ref(storage, result.imageUrl)); } catch {}
+        }
+
+        const ext = file.name.split(".").pop();
+        const path = `test-results/${editingTest.id}_${result.id}_${Date.now()}.${ext}`;
+        const downloadUrl = await uploadFile(file, path);
+        result.imageUrl = downloadUrl;
+        setResultUrls(prev => ({ ...prev, [result.id]: downloadUrl }));
+      }
+
+      setUploadingResultId(null);
+
       await updateDoc(doc(db, "custom_tests", editingTest.id), {
         results: updatedResults,
         updatedAt: serverTimestamp(),
       });
+
       alert("✅ 결과 이미지가 저장되었습니다.");
       setEditingTest(null);
       fetchTests();
-    } catch {
-      alert("저장 중 오류가 발생했습니다.");
+    } catch (err: any) {
+      alert("저장 실패: " + err.message);
     }
     setIsSavingImages(false);
+    setUploadingResultId(null);
   };
 
   return (
@@ -173,17 +195,13 @@ export default function TestBuilderPage() {
       <div className="flex gap-2 p-1 bg-slate-900 rounded-xl w-max border border-slate-700 mb-8">
         <button
           onClick={() => setTab("create")}
-          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-            tab === "create" ? "bg-indigo-600 text-white" : "text-slate-400"
-          }`}
+          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${tab === "create" ? "bg-indigo-600 text-white" : "text-slate-400"}`}
         >
           ➕ JSON으로 테스트 생성
         </button>
         <button
           onClick={() => setTab("manage")}
-          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-            tab === "manage" ? "bg-emerald-600 text-white" : "text-slate-400"
-          }`}
+          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${tab === "manage" ? "bg-emerald-600 text-white" : "text-slate-400"}`}
         >
           📋 테스트 목록 관리
         </button>
@@ -192,7 +210,6 @@ export default function TestBuilderPage() {
       {/* ── 생성 탭 ── */}
       {tab === "create" && (
         <div className="space-y-6">
-          {/* JSON 스키마 가이드 */}
           <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-slate-300 text-sm">📋 JSON 스키마 가이드</h3>
@@ -208,26 +225,19 @@ export default function TestBuilderPage() {
             </pre>
           </div>
 
-          {/* JSON 입력 */}
           <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5">
             <h3 className="font-bold text-slate-300 text-sm mb-3">📝 JSON 입력</h3>
             <textarea
               value={jsonInput}
-              onChange={(e) => {
-                setJsonInput(e.target.value);
-                setParseError("");
-                setParsed(null);
-              }}
+              onChange={(e) => { setJsonInput(e.target.value); setParseError(""); setParsed(null); }}
               placeholder="위 스키마 형식에 맞게 JSON을 입력하세요..."
               className="w-full h-64 p-4 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl text-xs font-mono resize-none focus:outline-none focus:border-indigo-500"
             />
-
             {parseError && (
               <div className="mt-2 p-3 bg-red-900/40 border border-red-700 rounded-xl text-red-400 text-xs">
                 ❌ {parseError}
               </div>
             )}
-
             <button
               onClick={handleParse}
               disabled={!jsonInput.trim()}
@@ -237,13 +247,11 @@ export default function TestBuilderPage() {
             </button>
           </div>
 
-          {/* 파싱 성공 미리보기 */}
           {parsed && (
             <div className="bg-slate-800 rounded-2xl border border-emerald-700/50 p-5">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-emerald-400 font-black">✅ 유효한 JSON</span>
               </div>
-
               <div className="space-y-2 text-sm mb-5">
                 <div className="flex gap-3">
                   <span className="text-slate-500 w-24 flex-shrink-0">제목</span>
@@ -261,15 +269,7 @@ export default function TestBuilderPage() {
                   <span className="text-slate-500 w-24 flex-shrink-0">결과 수</span>
                   <span className="text-slate-100">{parsed.results.length}개</span>
                 </div>
-                {parsed.description && (
-                  <div className="flex gap-3">
-                    <span className="text-slate-500 w-24 flex-shrink-0">설명</span>
-                    <span className="text-slate-300">{parsed.description}</span>
-                  </div>
-                )}
               </div>
-
-              {/* 결과 목록 미리보기 */}
               <div className="bg-slate-900 rounded-xl p-4 mb-5">
                 <p className="text-slate-400 text-xs font-bold mb-2">결과 유형 미리보기</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -286,7 +286,6 @@ export default function TestBuilderPage() {
                   ))}
                 </div>
               </div>
-
               <button
                 onClick={handlePublish}
                 disabled={isSaving}
@@ -320,11 +319,7 @@ export default function TestBuilderPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-black text-slate-100">{test.title}</h3>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          test.isActive
-                            ? "bg-emerald-900 text-emerald-400"
-                            : "bg-slate-700 text-slate-500"
-                        }`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${test.isActive ? "bg-emerald-900 text-emerald-400" : "bg-slate-700 text-slate-500"}`}>
                           {test.isActive ? "✓ 활성" : "비활성"}
                         </span>
                       </div>
@@ -333,9 +328,11 @@ export default function TestBuilderPage() {
                         <span>경로: <span className="text-indigo-400 font-mono">/test/{test.slug}</span></span>
                         <span>질문 {test.questions?.length || 0}개</span>
                         <span>결과 {test.results?.length || 0}개</span>
-                        <span>
-                          이미지 {(test.results || []).filter((r: any) => r.imageUrl).length}/
-                          {(test.results || []).length}
+                        <span className={
+                          (test.results || []).filter((r: any) => r.imageUrl).length === (test.results || []).length
+                            ? "text-emerald-400" : ""
+                        }>
+                          이미지 {(test.results || []).filter((r: any) => r.imageUrl).length}/{(test.results || []).length}
                         </span>
                       </div>
                     </div>
@@ -355,52 +352,55 @@ export default function TestBuilderPage() {
                     </div>
                   </div>
 
-                  {/* 결과 이미지 편집 인라인 패널 */}
+                  {/* 결과 이미지 편집 패널 */}
                   {editingTest?.id === test.id && (
                     <div className="mt-4 pt-4 border-t border-slate-700">
-                      <h4 className="font-bold text-slate-300 text-sm mb-3">
-                        🖼️ 결과 유형별 이미지 설정
+                      <h4 className="font-bold text-slate-300 text-sm mb-4">
+                        🖼️ 결과 유형별 이미지 업로드
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                        {editingTest.results.map((r: any) => (
-                          <div key={r.id} className="bg-slate-900 rounded-xl p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              {resultImages[r.id] ? (
-                                <img
-                                  src={resultImages[r.id]}
-                                  alt={r.name}
-                                  className="w-10 h-10 rounded-lg object-cover border border-slate-700"
-                                  onError={(e) => (e.currentTarget.style.display = "none")}
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-lg bg-slate-700 border border-dashed border-slate-600 flex items-center justify-center text-slate-500 text-xs">
-                                  없음
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                        {editingTest.results.map((r: any) => {
+                          const isUploading = uploadingResultId === r.id && uploadState.isUploading;
+                          return (
+                            <div key={r.id} className="bg-slate-900 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="w-6 h-6 rounded-full bg-indigo-900 text-indigo-300 flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                  {r.id}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-slate-200 text-xs font-bold truncate">{r.name}</p>
+                                  {r.mbti && <p className="text-slate-500 text-[10px]">{r.mbti}</p>}
                                 </div>
-                              )}
-                              <div>
-                                <p className="text-slate-200 text-xs font-bold">{r.name}</p>
-                                <p className="text-slate-500 text-[10px]">ID: {r.id}</p>
                               </div>
+                              <ImageUploader
+                                currentImageUrl={resultUrls[r.id]}
+                                uploadState={isUploading ? uploadState : { progress: 0, isUploading: false, error: null }}
+                                onFileSelect={(file) => setResultFiles(prev => ({ ...prev, [r.id]: file }))}
+                                onRemove={() => {
+                                  setResultFiles(prev => ({ ...prev, [r.id]: null }));
+                                  setResultUrls(prev => ({ ...prev, [r.id]: "" }));
+                                }}
+                                label="결과 이미지"
+                                aspectClass="aspect-square"
+                              />
+                              {resultFiles[r.id] && (
+                                <p className="text-emerald-400 text-[10px] mt-1 text-center">✓ 업로드 대기 중</p>
+                              )}
                             </div>
-                            <input
-                              type="url"
-                              value={resultImages[r.id] || ""}
-                              onChange={(e) =>
-                                setResultImages(prev => ({ ...prev, [r.id]: e.target.value }))
-                              }
-                              placeholder="이미지 URL 입력"
-                              className="w-full p-2 bg-slate-800 text-slate-100 border border-slate-700 rounded-lg text-xs focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-3">
                         <button
                           onClick={handleSaveImages}
-                          disabled={isSavingImages}
+                          disabled={isSavingImages || Object.values(resultFiles).every(f => f === null)}
                           className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
                         >
-                          {isSavingImages ? "저장 중..." : "전체 저장"}
+                          {isSavingImages
+                            ? uploadingResultId
+                              ? `${uploadingResultId} 업로드 중... ${uploadState.progress}%`
+                              : "저장 중..."
+                            : "전체 저장"}
                         </button>
                         <button
                           onClick={() => setEditingTest(null)}
@@ -408,6 +408,9 @@ export default function TestBuilderPage() {
                         >
                           닫기
                         </button>
+                        <p className="text-slate-500 text-xs">
+                          선택된 이미지만 업로드됩니다
+                        </p>
                       </div>
                     </div>
                   )}
