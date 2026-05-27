@@ -4,11 +4,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// 2025년 기준 실제 사용 가능한 모델 (v1beta API 지원)
+// 2026년 5월 기준 실제 사용 가능한 모델 (무료 티어)
 const FALLBACK_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-2.5-flash-preview-04-17",
+  "gemini-3.1-flash-lite",  // RPM 15 — 가장 빠름, 1순위
+  "gemini-3.5-flash",       // RPM 5  — 고품질, 2순위
+  "gemini-2.5-flash",       // RPM 5  — 폴백용, 3순위
 ];
 
 export async function POST(req: Request) {
