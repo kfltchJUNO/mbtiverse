@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 // ========== 타입 정의 ==========
 interface Conversation {
@@ -33,9 +34,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
 // ========== Export (필수!) ==========
-export { app, db, storage };
+export { app, db, storage, auth, googleProvider };
 
 // ========== Imports ==========
 import {
