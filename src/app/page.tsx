@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [customTests, setCustomTests] = useState<any[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
@@ -25,7 +26,19 @@ export default function Home() {
       } catch {}
       finally { setLoadingPosts(false); }
     }
+    async function fetchCustomTests() {
+      try {
+        const q = query(
+          collection(db, "custom_tests"),
+          where("isActive", "==", true),
+          orderBy("createdAt", "desc")
+        );
+        const snapshot = await getDocs(q);
+        setCustomTests(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      } catch (e) { console.error("custom_tests 로드 실패:", e); }
+    }
     fetchPosts();
+    fetchCustomTests();
   }, []);
 
   return (
@@ -280,16 +293,28 @@ export default function Home() {
           <h2 className="font-black text-slate-800 text-base mb-3">🚀 심리 테스트</h2>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4"
                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-            {[
-              { href: "/test/fruit", emoji: "🍎", label: "성격 과일", color: "bg-indigo-50 text-indigo-700 border-indigo-100" },
-              { href: "/test/future-item", emoji: "🚀", label: "미래 인생템", color: "bg-pink-50 text-pink-700 border-pink-100" },
-              ...(user && !isAdmin ? [{ href: "/my-history", emoji: "📚", label: "내 기록", color: "bg-emerald-50 text-emerald-700 border-emerald-100" }] : []),
-            ].map(({ href, emoji, label, color }) => (
-              <Link key={href} href={href} className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 ${color} border rounded-2xl font-bold text-sm`}>
-                <span className="text-2xl">{emoji}</span>
-                <span className="text-xs whitespace-nowrap">{label}</span>
+            {/* 고정 테스트 */}
+            <Link href="/test/fruit" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl font-bold text-sm">
+              <span className="text-2xl">🍎</span>
+              <span className="text-xs whitespace-nowrap">성격 과일</span>
+            </Link>
+            <Link href="/test/future-item" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-pink-50 text-pink-700 border border-pink-100 rounded-2xl font-bold text-sm">
+              <span className="text-2xl">🚀</span>
+              <span className="text-xs whitespace-nowrap">미래 인생템</span>
+            </Link>
+            {/* 커스텀 테스트 동적 로드 */}
+            {customTests.map((test) => (
+              <Link key={test.id} href={`/test/${test.slug}`} className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-purple-50 text-purple-700 border border-purple-100 rounded-2xl font-bold text-sm">
+                <span className="text-2xl">{test.emoji || "🧠"}</span>
+                <span className="text-xs whitespace-nowrap">{test.title?.length > 8 ? test.title.slice(0, 8) + "…" : test.title}</span>
               </Link>
             ))}
+            {user && !isAdmin && (
+              <Link href="/my-history" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl font-bold text-sm">
+                <span className="text-2xl">📚</span>
+                <span className="text-xs whitespace-nowrap">내 기록</span>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -419,6 +444,13 @@ export default function Home() {
               <h3 className="font-black text-slate-800 mb-3">🚀 심리 테스트</h3>
               <Link href="/test/fruit" className="block w-full p-3.5 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition">🍎 성격 과일 테스트</Link>
               <Link href="/test/future-item" className="block w-full p-3.5 bg-pink-50 text-pink-700 rounded-xl font-bold text-sm hover:bg-pink-100 transition">🚀 미래 인생템 테스트</Link>
+              {/* 커스텀 테스트 동적 로드 */}
+              {customTests.map((test) => (
+                <Link key={test.id} href={`/test/${test.slug}`}
+                  className="block w-full p-3.5 bg-purple-50 text-purple-700 rounded-xl font-bold text-sm hover:bg-purple-100 transition">
+                  {test.emoji || "🧠"} {test.title}
+                </Link>
+              ))}
               {user && !isAdmin && <Link href="/my-history" className="block w-full p-3.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition">📚 내 테스트 기록</Link>}
               {isAdmin && <>
                 <Link href="/scripts" className="block w-full p-3.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm hover:bg-emerald-100 transition">🎧 대본 아카이브</Link>
