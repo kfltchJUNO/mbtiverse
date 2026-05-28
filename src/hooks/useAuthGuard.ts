@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut, User } from "firebase/auth";
 import { auth, googleProvider, db } from "../lib/firebase";
 import {
-  doc, onSnapshot, setDoc, getDoc,
-  updateDoc, increment, serverTimestamp,
-  collection, query, where, getDocs,
+  doc, onSnapshot, setDoc, getDoc, serverTimestamp,
 } from "firebase/firestore";
 
 export const ADMIN_EMAIL = "ot.helper7@gmail.com";
@@ -54,23 +52,13 @@ export function useAuthGuard() {
           });
         }
 
-        // pending 스텔라 지급 체크 (구매했지만 미가입 상태였던 경우)
+        // pending 스텔라 지급 체크 (서버 API 호출)
         try {
-          const pendingQ = query(
-            collection(db, "gumroad_sales"),
-            where("email", "==", currentUser.email),
-            where("status", "==", "pending")
-          );
-          const pendingSnap = await getDocs(pendingQ);
-          for (const pendingDoc of pendingSnap.docs) {
-            const data = pendingDoc.data();
-            await updateDoc(userRef, { stella: increment(data.stellaAmount) });
-            await updateDoc(doc(db, "gumroad_sales", pendingDoc.id), {
-              status: "completed",
-              uid: currentUser.uid,
-            });
-            console.log(`✅ pending 스텔라 지급: +${data.stellaAmount}`);
-          }
+          await fetch("/api/stella/claim-pending", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uid: currentUser.uid, email: currentUser.email }),
+          });
         } catch (e) {
           console.error("pending 스텔라 처리 오류:", e);
         }
