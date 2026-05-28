@@ -51,7 +51,7 @@ export default function TestBuilderPage() {
 
   const [topic, setTopic] = useState("");
   const [choiceCount, setChoiceCount] = useState<2|3|4>(4);
-  const [resultCount, setResultCount] = useState(4);
+  const resultCount = 16; // 항상 16개 고정
   const [testTitle, setTestTitle] = useState("");
   const [testDesc, setTestDesc] = useState("");
   const [testSlug, setTestSlug] = useState("");
@@ -121,8 +121,8 @@ ${topic}
 - results ${resultCount}개, mbti는 16개 MBTI 중 하나`;
 
     const template = {
-      questions: [{ id: 1, text: "질문 예시", options: labels.map((l, i) => ({ text: `선택지 ${l}`, value: `result_${(i%resultCount)+1}` })) }],
-      results: Array.from({ length: resultCount }, (_, i) => ({ id: `result_${i+1}`, name: `결과 ${i+1}`, description: "설명", mbti: MBTI_LIST[i%16], emoji: "🧠" }))
+      questions: [{ id: 1, text: "질문 예시", options: labels.map((l, i) => ({ text: `선택지 ${l}`, value: `result_${(i%16)+1}` })) }],
+      results: MBTI_LIST.map((mbti, i) => ({ id: `result_${i+1}`, name: `${mbti} 유형`, description: "설명", mbti, emoji: "🧠" }))
     };
 
     setGeneratedPrompt(prompt);
@@ -239,11 +239,8 @@ square 1:1 ratio, 512x512px, game UI avatar style`;
             </div>
             <div>
               <label className="text-xs font-bold text-slate-400 mb-2 block">결과 유형 수</label>
-              <div className="flex gap-2">
-                {[2,4,6,8].map(n => (
-                  <button key={n} onClick={()=>setResultCount(n)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${resultCount===n?"bg-indigo-600 text-white":"bg-slate-700 text-slate-400"}`}>{n}</button>
-                ))}
+              <div className="py-2.5 px-3 bg-slate-700 rounded-xl text-xs font-bold text-indigo-300 text-center">
+                16개 고정 (MBTI 16유형)
               </div>
             </div>
           </div>
