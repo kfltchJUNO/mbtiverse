@@ -11,7 +11,7 @@ import {
 
 export const ADMIN_EMAIL = "ot.helper7@gmail.com";
 
-interface UserProfile {
+export interface UserProfile {
   stella: number;
   email: string;
   role?: string;
