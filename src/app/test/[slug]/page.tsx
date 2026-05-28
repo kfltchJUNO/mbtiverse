@@ -25,6 +25,8 @@ interface TestData {
     name: string;
     description: string;
     mbti?: string;
+    bestMbti?: string;
+    oppositeMbti?: string;
     imageUrl?: string;
   }[];
 }
