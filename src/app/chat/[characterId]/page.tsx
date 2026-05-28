@@ -55,6 +55,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const [prevSummary, setPrevSummary] = useState('');
   const [isSavingSummary, setIsSavingSummary] = useState(false);
   const [showFarewellModal, setShowFarewellModal] = useState(false);
+  const [showNoStellaModal, setShowNoStellaModal] = useState(false);
   const [farewellMessage, setFarewellMessage] = useState('');
   const [pendingPhoto, setPendingPhoto] = useState<{ imageUrl: string; caption: string; id: string } | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -152,8 +153,11 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const handleSend = async () => {
     if (!input.trim() || isSending || !user || !roomId) return;
     if (!canSend()) {
-      alert(`오늘 무료 대화(${FREE_DAILY_MESSAGES}회)를 모두 사용했습니다.\n추가 대화는 ${stellaPerMessage} 스텔라가 차감됩니다.\n스텔라를 충전해주세요.`);
-      return;
+      if ((profile?.stella || 0) < stellaPerMessage) {
+        setShowNoStellaModal(true);
+        return;
+      }
+      // 스텔라 차감은 기존 로직 유지
     }
 
     const userMessage: Message = {
@@ -207,6 +211,8 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           characterId,
           messages: contextMessages,
           userId: user.uid,
+          userGender,
+          prevSummary,
         }),
       });
 
@@ -221,6 +227,12 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           characterId,
           createdAt: serverTimestamp(),
         });
+
+        // [FAREWELL] 감지 → 종료 모달 표시
+        if (data.isFarewell) {
+          setFarewellMessage(data.reply);
+          setShowFarewellModal(true);
+        }
       } else {
         throw new Error(data.error);
       }
@@ -408,6 +420,99 @@ export default function ChatPage({ params }: { params: { characterId: string } }
         <div ref={bottomRef} />
       </main>
 
+      {/* ── 대화 종료 확인 모달 ── */}
+      {showFarewellModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 mb-4">
+            <div className="text-center mb-5">
+              <p className="text-3xl mb-2">💬</p>
+              <p className="font-black text-slate-800 text-base mb-2">대화를 마칠까요?</p>
+              {farewellMessage && (
+                <p className="text-slate-500 text-sm leading-relaxed">
+                  &ldquo;{farewellMessage}&rdquo;
+                </p>
+              )}
+              <p className="text-slate-400 text-xs mt-2">
+                대화 내용이 저장되어 다음에 이어서 대화할 수 있어요.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFarewellModal(false)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition"
+              >
+                계속 대화하기
+              </button>
+              <button
+                onClick={async () => {
+                  setShowFarewellModal(false);
+                  if (user && messages.length > 2) {
+                    try {
+                      const recentMsgs = messages.slice(-20).map(m =>
+                        `${m.role === 'user' ? '나' : character?.name}: ${m.content}`
+                      ).join('\n');
+                      const summaryRes = await fetch('/api/summarize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversation: recentMsgs, characterId }),
+                      });
+                      const summaryData = await summaryRes.json();
+                      if (summaryData.summary) {
+                        const { setDoc, doc: fsDoc } = await import('firebase/firestore');
+                        await setDoc(fsDoc(db, 'chat_summaries', `${user.uid}_${characterId}`), {
+                          summary: summaryData.summary,
+                          updatedAt: new Date(),
+                        });
+                      }
+                    } catch {}
+                  }
+                  router.push('/chat');
+                }}
+                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm transition"
+              >
+                종료 & 저장 💾
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ── 스텔라 부족 모달 ── */}
+      {showNoStellaModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 mb-4">
+            <div className="text-center mb-5">
+              <img src="/stella.png" className="w-12 h-12 mx-auto mb-3" alt="stella" />
+              <p className="font-black text-slate-800 text-base mb-1">스텔라가 부족해요</p>
+              <p className="text-slate-500 text-sm">
+                무료 대화 {FREE_DAILY_MESSAGES}회를 모두 사용했어요.<br/>
+                추가 대화는 회당 <span className="font-bold text-amber-500">{stellaPerMessage} 스텔라</span>가 필요해요.
+              </p>
+              <div className="mt-3 flex items-center justify-center gap-1.5 bg-slate-50 rounded-xl py-2 px-4">
+                <img src="/stella.png" className="w-4 h-4" alt="stella" />
+                <span className="text-slate-500 text-sm">현재 잔액:</span>
+                <span className="font-black text-amber-500">{profile?.stella ?? 0}</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNoStellaModal(false)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition"
+              >
+                닫기
+              </button>
+              <a
+                href="/stella"
+                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl font-black text-sm text-center transition"
+              >
+                ✨ 충전하기
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 자동 사진 알림 버튼 ── */}
       {pendingPhoto && (
         <div className="sticky bottom-[72px] z-30 flex justify-center px-4 pointer-events-none">
@@ -487,9 +592,14 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           <button
             onClick={handleSend}
             disabled={isSending || !input.trim()}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
+            className="relative px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
           >
             전송
+            {!isAdmin && getFreeSlotsLeft() === 0 && (
+              <span className="absolute -top-2 -right-2 bg-amber-500 text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                -{stellaPerMessage}
+              </span>
+            )}
           </button>
         </div>
       </footer>

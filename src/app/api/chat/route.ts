@@ -1,6 +1,6 @@
 // src/app/api/chat/route.ts
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { CHARACTERS } from "../../../lib/characters";
 
 // ── 다중 API 키
@@ -10,10 +10,7 @@ const API_KEYS = [
   process.env.GEMINI_API_KEY_3,
 ].filter(Boolean) as string[];
 
-// ── 2026년 5월 기준 유효한 모델 (무료 티어)
-// gemini-3.1-flash-lite: 가장 빠르고 저렴, RPM 30
-// gemini-2.5-flash-lite: 중간, RPM 15
-// gemini-2.5-flash: 고품질, RPM 10
+// ── 2026년 5월 기준 유효 모델
 const MODELS = [
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash-lite",
@@ -24,10 +21,9 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function tryGenerate(
   systemPrompt: string,
-  history: any[],
+  history: { role: string; parts: { text: string }[] }[],
   userMessage: string
 ): Promise<string> {
-  // 키 × 모델 조합 (키 우선 순환)
   const attempts: { key: string; model: string }[] = [];
   for (const key of API_KEYS) {
     for (const model of MODELS) {
@@ -40,14 +36,28 @@ async function tryGenerate(
   for (let i = 0; i < attempts.length; i++) {
     const { key, model } = attempts[i];
     try {
-      const genAI = new GoogleGenerativeAI(key);
-      const genModel = genAI.getGenerativeModel({
+      const ai = new GoogleGenAI({ apiKey: key });
+
+      // 히스토리 + 현재 메시지를 contents 배열로 조합
+      const contents = [
+        ...history.map(h => ({
+          role: h.role,
+          parts: h.parts,
+        })),
+        { role: "user", parts: [{ text: userMessage }] },
+      ];
+
+      const response = await ai.models.generateContent({
         model,
-        systemInstruction: systemPrompt,
+        contents,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.9,
+          maxOutputTokens: 300,
+        },
       });
-      const chat = genModel.startChat({ history });
-      const result = await chat.sendMessage(userMessage);
-      const text = result.response.text();
+
+      const text = response.text;
       if (!text) throw new Error("빈 응답");
       console.log(`✅ key#${API_KEYS.indexOf(key) + 1} / ${model}`);
       return text;
@@ -55,7 +65,6 @@ async function tryGenerate(
       lastError = err.message || String(err);
       console.warn(`⚠️ key#${API_KEYS.indexOf(key) + 1} / ${model}: ${lastError}`);
 
-      // 429 또는 quota 초과 시 대기
       if (
         lastError.includes("429") ||
         lastError.includes("quota") ||
@@ -64,11 +73,10 @@ async function tryGenerate(
         const wait = Math.min(800 * (i + 1), 3000);
         await sleep(wait);
       }
-      // 모델 자체가 없는 경우(404)는 바로 다음으로
     }
   }
 
-  throw new Error("모든 모델/키 실패. 잠시 후 다시 시도해주세요. (" + lastError + ")");
+  throw new Error("모든 모델/키 실패: " + lastError);
 }
 
 export async function POST(req: Request) {
@@ -111,7 +119,7 @@ export async function POST(req: Request) {
       genderCtx +
       summaryCtx;
 
-    // 히스토리 (최근 10개, 이미지 메시지 제외)
+    // 히스토리 (최근 9개, 마지막 메시지 제외)
     const history = messages
       .slice(0, -1)
       .slice(-9)
@@ -121,7 +129,7 @@ export async function POST(req: Request) {
       }));
 
     const lastMessage = messages[messages.length - 1];
-    if (!lastMessage?.content) {
+    if (!lastMessage?.content?.trim()) {
       return NextResponse.json(
         { success: false, error: "메시지 내용이 없습니다." },
         { status: 400 }
