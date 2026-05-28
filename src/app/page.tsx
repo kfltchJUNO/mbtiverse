@@ -12,6 +12,7 @@ export default function Home() {
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [customTests, setCustomTests] = useState<any[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showTestModal, setShowTestModal] = useState(false);
   const router = useRouter();
 
   const { user, profile, loading: loadingAuth, isAdmin, loginWithGoogle, logout, isInAppBrowser } = useAuthGuard();
@@ -62,9 +63,9 @@ export default function Home() {
             {user && (
               <button
                 onClick={() => router.push("/chat")}
-                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black"
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-black shadow-md"
               >
-                💬 채팅
+                💬 채팅 시작
               </button>
             )}
             {/* 햄버거 메뉴 */}
@@ -288,35 +289,73 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── 모바일: 테스트 바로가기 가로 스크롤 ── */}
+        {/* ── 모바일: 테스트 바로가기 (버튼 → 모달) ── */}
         <div className="lg:hidden px-4 py-4">
-          <h2 className="font-black text-slate-800 text-base mb-3">🚀 심리 테스트</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4"
-               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-            {/* 고정 테스트 */}
-            <Link href="/test/fruit" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl font-bold text-sm">
-              <span className="text-2xl">🍎</span>
-              <span className="text-xs whitespace-nowrap">성격 과일</span>
-            </Link>
-            <Link href="/test/future-item" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-pink-50 text-pink-700 border border-pink-100 rounded-2xl font-bold text-sm">
-              <span className="text-2xl">🚀</span>
-              <span className="text-xs whitespace-nowrap">미래 인생템</span>
-            </Link>
-            {/* 커스텀 테스트 동적 로드 */}
-            {customTests.map((test) => (
-              <Link key={test.id} href={`/test/${test.slug}`} className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-purple-50 text-purple-700 border border-purple-100 rounded-2xl font-bold text-sm">
-                <span className="text-2xl">{test.emoji || "🧠"}</span>
-                <span className="text-xs whitespace-nowrap">{test.title?.length > 8 ? test.title.slice(0, 8) + "…" : test.title}</span>
-              </Link>
-            ))}
-            {user && !isAdmin && (
-              <Link href="/my-history" className="flex-shrink-0 flex flex-col items-center gap-1.5 px-5 py-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl font-bold text-sm">
-                <span className="text-2xl">📚</span>
-                <span className="text-xs whitespace-nowrap">내 기록</span>
-              </Link>
-            )}
-          </div>
+          <button
+            onClick={() => setShowTestModal(true)}
+            className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🧠</span>
+              <div className="text-left">
+                <p className="font-black text-indigo-700 text-sm">심리 테스트</p>
+                <p className="text-indigo-400 text-xs">{2 + customTests.length}가지 테스트 보기</p>
+              </div>
+            </div>
+            <span className="text-indigo-400 font-bold text-lg">→</span>
+          </button>
         </div>
+
+        {/* ── 테스트 선택 모달 ── */}
+        {showTestModal && (
+          <>
+            <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setShowTestModal(false)} />
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl p-6 pb-10">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-black text-slate-800 text-lg">🧠 심리 테스트</h3>
+                <button onClick={() => setShowTestModal(false)} className="text-slate-400 text-xl font-bold">✕</button>
+              </div>
+              <div className="space-y-3">
+                <Link href="/test/fruit" onClick={() => setShowTestModal(false)}
+                  className="flex items-center gap-4 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                  <span className="text-3xl">🍎</span>
+                  <div>
+                    <p className="font-black text-indigo-700">성격 과일 테스트</p>
+                    <p className="text-indigo-400 text-xs">나와 닮은 과일 유형은?</p>
+                  </div>
+                </Link>
+                <Link href="/test/future-item" onClick={() => setShowTestModal(false)}
+                  className="flex items-center gap-4 p-4 bg-pink-50 border border-pink-100 rounded-2xl">
+                  <span className="text-3xl">🚀</span>
+                  <div>
+                    <p className="font-black text-pink-700">미래 인생템 테스트</p>
+                    <p className="text-pink-400 text-xs">나의 미래 필수템은?</p>
+                  </div>
+                </Link>
+                {customTests.map((test) => (
+                  <Link key={test.id} href={`/test/${test.slug}`} onClick={() => setShowTestModal(false)}
+                    className="flex items-center gap-4 p-4 bg-purple-50 border border-purple-100 rounded-2xl">
+                    <span className="text-3xl">{test.emoji || "🧠"}</span>
+                    <div>
+                      <p className="font-black text-purple-700">{test.title}</p>
+                      {test.description && <p className="text-purple-400 text-xs line-clamp-1">{test.description}</p>}
+                    </div>
+                  </Link>
+                ))}
+                {user && !isAdmin && (
+                  <Link href="/my-history" onClick={() => setShowTestModal(false)}
+                    className="flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                    <span className="text-3xl">📚</span>
+                    <div>
+                      <p className="font-black text-emerald-700">내 테스트 기록</p>
+                      <p className="text-emerald-400 text-xs">지금까지 한 테스트 보기</p>
+                    </div>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ── 데스크탑: 기존 4컬럼 레이아웃 ── */}
         <div className="hidden lg:grid lg:grid-cols-4 gap-8 p-6">

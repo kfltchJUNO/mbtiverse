@@ -1,231 +1,271 @@
-// src/app/admin/mbti-assets/page.tsx
+// src/app/test/[slug]/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, deleteObject } from "firebase/storage";
-import { db, storage } from "../../../lib/firebase";
-import { useStorageUpload } from "../../../hooks/useStorageUpload";
-import ImageUploader from "../../../components/ui/ImageUploader";
+import Link from "next/link";
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../../lib/firebase";
+import { useAuthGuard } from "../../../hooks/useAuthGuard";
 
-const MBTI_LIST = [
-  "ENFJ","ENFP","ENTJ","ENTP",
-  "ESFJ","ESFP","ESTJ","ESTP",
-  "INFJ","INFP","INTJ","INTP",
-  "ISFJ","ISFP","ISTJ","ISTP",
-];
+// 기본 이미지 (결과 이미지 없을 때 폴백)
+const DEFAULT_RESULT_IMAGE = "https://via.placeholder.com/300x300/6366f1/ffffff?text=RESULT";
 
-const DEFAULT_EMOJI: Record<string, string> = {
-  ENFJ: "🌟", ENFP: "✨", ENTJ: "🔥", ENTP: "💡",
-  ESFJ: "🌸", ESFP: "💃", ESTJ: "🏆", ESTP: "⚡",
-  INFJ: "🔮", INFP: "🌙", INTJ: "🧠", INTP: "🔭",
-  ISFJ: "🍀", ISFP: "🎨", ISTJ: "📋", ISTP: "🔧",
-};
+interface TestData {
+  id: string;
+  title: string;
+  description?: string;
+  slug: string;
+  questions: {
+    id: number;
+    text: string;
+    options: { text: string; value: string }[];
+  }[];
+  results: {
+    id: string;
+    name: string;
+    description: string;
+    mbti?: string;
+    imageUrl?: string;
+  }[];
+}
 
-export default function MbtiAssetsPage() {
-  const [assets, setAssets] = useState<Record<string, { emoji?: string; imageUrl?: string }>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [inputEmoji, setInputEmoji] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const { uploadFile, uploadState, reset: resetUpload } = useStorageUpload();
+export default function CustomTestPage({ params }: { params: { slug: string } }) {
+  const [testData, setTestData] = useState<TestData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [result, setResult] = useState<TestData["results"][0] | null>(null);
+  const { user } = useAuthGuard();
 
   useEffect(() => {
-    async function load() {
-      const snap = await getDocs(collection(db, "mbti_assets"));
-      const map: Record<string, any> = {};
-      snap.docs.forEach(d => { map[d.id] = d.data(); });
-      setAssets(map);
-    }
-    load();
-  }, []);
-
-  const handleEdit = (mbti: string) => {
-    setEditingId(mbti);
-    setInputEmoji(assets[mbti]?.emoji || DEFAULT_EMOJI[mbti] || "");
-    setPendingFile(null);
-    resetUpload();
-  };
-
-  const handleSave = async (mbti: string) => {
-    setIsSaving(true);
-    try {
-      let imageUrl = assets[mbti]?.imageUrl || "";
-
-      // 새 파일 있으면 업로드
-      if (pendingFile) {
-        // 기존 이미지 삭제
-        if (imageUrl) {
-          try { await deleteObject(ref(storage, imageUrl)); } catch {}
+    async function loadTest() {
+      try {
+        const q = query(
+          collection(db, "custom_tests"),
+          where("slug", "==", params.slug),
+          where("isActive", "==", true)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          setTestData({ id: snap.docs[0].id, ...snap.docs[0].data() } as TestData);
         }
-        const ext = pendingFile.name.split(".").pop();
-        const path = `mbti-assets/${mbti}_${Date.now()}.${ext}`;
-        imageUrl = await uploadFile(pendingFile, path);
+      } catch (err) {
+        console.error("테스트 로드 실패:", err);
       }
-
-      await setDoc(doc(db, "mbti_assets", mbti), {
-        emoji: inputEmoji.trim() || DEFAULT_EMOJI[mbti],
-        imageUrl,
-        updatedAt: serverTimestamp(),
-      });
-
-      setAssets(prev => ({ ...prev, [mbti]: { emoji: inputEmoji.trim(), imageUrl } }));
-      setEditingId(null);
-      setPendingFile(null);
-      alert(`✅ ${mbti} 에셋이 저장되었습니다.`);
-    } catch (err: any) {
-      alert("저장 실패: " + err.message);
+      setLoading(false);
     }
-    setIsSaving(false);
+    loadTest();
+  }, [params.slug]);
+
+  const handleOptionClick = (value: string) => {
+    const newAnswers = [...answers, value];
+    setAnswers(newAnswers);
+
+    if (!testData) return;
+
+    if (step < testData.questions.length - 1) {
+      setStep(step + 1);
+    } else {
+      // 결과 계산: 가장 많이 선택된 value와 일치하는 result 찾기
+      setStep(testData.questions.length); // 로딩 스텝
+
+      setTimeout(async () => {
+        const counts: Record<string, number> = {};
+        newAnswers.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+        const topValue = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        const matched = testData.results.find(r => r.id === topValue) || testData.results[0];
+        setResult(matched);
+        setStep(testData.questions.length + 1);
+
+        // 결과 저장
+        if (user) {
+          try {
+            await addDoc(collection(db, "testHistory"), {
+              userId: user.uid,
+              testName: testData.title,
+              mbti: matched.mbti || matched.id,
+              resultName: matched.name,
+              createdAt: serverTimestamp(),
+            });
+          } catch {}
+        }
+      }, 1800);
+    }
   };
 
-  const handleRemoveImage = async (mbti: string) => {
-    if (!confirm("이미지를 삭제하시겠습니까? (이모지는 유지됩니다)")) return;
-    try {
-      const url = assets[mbti]?.imageUrl;
-      if (url) { try { await deleteObject(ref(storage, url)); } catch {} }
-      await setDoc(doc(db, "mbti_assets", mbti), {
-        emoji: assets[mbti]?.emoji || DEFAULT_EMOJI[mbti],
-        imageUrl: "",
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      setAssets(prev => ({ ...prev, [mbti]: { ...prev[mbti], imageUrl: "" } }));
-    } catch { alert("삭제 실패"); }
+  const handleBack = () => {
+    if (step > 0 && step <= (testData?.questions.length || 0)) {
+      setStep(step - 1);
+      setAnswers(prev => prev.slice(0, -1));
+    }
   };
 
-  const registeredCount = Object.values(assets).filter(a => a.imageUrl).length;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
+      </div>
+    );
+  }
+
+  if (!testData) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-center p-6">
+        <div>
+          <p className="text-2xl mb-4">😢</p>
+          <p className="text-slate-500 mb-4">테스트를 찾을 수 없습니다.</p>
+          <Link href="/" className="text-indigo-600 font-bold hover:underline">홈으로 가기</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const totalSteps = testData.questions.length;
+  const isLoading = step === totalSteps;
+  const isResult = step === totalSteps + 1;
 
   return (
-    <div className="max-w-5xl mx-auto pb-12">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-black text-slate-100">MBTI 에셋 관리</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            포스트 상세 페이지의 MBTI별 이모지/이미지를 설정합니다
-          </p>
-        </div>
-        <div className="text-xs text-slate-500 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2">
-          이미지 등록: <span className="text-emerald-400 font-bold">{registeredCount}</span> / 16
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center relative overflow-hidden">
 
-      {/* 안내 */}
-      <div className="bg-indigo-900/30 border border-indigo-700/50 rounded-2xl p-4 mb-6 text-xs text-indigo-300 space-y-1">
-        <p className="font-bold">📌 우선순위: 커스텀 이미지 → 커스텀 이모지 → 기본 이모지</p>
-        <p>이미지를 등록하면 이미지가 표시되고, 없으면 이모지가 표시됩니다.</p>
-        <p>이모지만 바꾸고 싶으면 이미지 없이 이모지만 수정하면 됩니다.</p>
-      </div>
+        {/* 프로그레스 바 */}
+        {step >= 1 && step < totalSteps && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
+            <div className="h-full bg-indigo-500 transition-all duration-300"
+              style={{ width: `${(step / totalSteps) * 100}%` }} />
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {MBTI_LIST.map(mbti => {
-          const asset = assets[mbti];
-          const isEditing = editingId === mbti;
-          const hasImage = !!asset?.imageUrl;
-          const currentEmoji = asset?.emoji || DEFAULT_EMOJI[mbti];
-
-          return (
-            <div
-              key={mbti}
-              className={`bg-slate-800 rounded-2xl border p-4 transition ${
-                isEditing ? "border-indigo-500" : "border-slate-700"
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                {/* 현재 표시 아이콘 */}
-                <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 flex items-center justify-center flex-shrink-0">
-                  {hasImage ? (
-                    <img src={asset.imageUrl} alt={mbti} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-2xl">{currentEmoji}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-100">{mbti}</span>
-                    {hasImage && (
-                      <span className="text-[10px] bg-emerald-900 text-emerald-400 px-2 py-0.5 rounded-full font-bold">
-                        이미지
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-slate-500 text-xs">현재: {currentEmoji}</p>
-                </div>
-                {!isEditing && (
-                  <button
-                    onClick={() => handleEdit(mbti)}
-                    className="px-3 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-indigo-300 rounded-lg text-xs font-bold transition border border-indigo-700"
-                  >
-                    ✏️ 수정
-                  </button>
-                )}
-              </div>
-
-              {isEditing && (
-                <div className="space-y-3 pt-3 border-t border-slate-700">
-                  {/* 이모지 입력 */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">
-                      이모지 (이미지 없을 때 표시)
-                    </label>
-                    <input
-                      type="text"
-                      value={inputEmoji}
-                      onChange={e => setInputEmoji(e.target.value)}
-                      placeholder={DEFAULT_EMOJI[mbti]}
-                      className="w-full p-2.5 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
-                      maxLength={4}
-                    />
-                  </div>
-
-                  {/* 이미지 업로드 */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">
-                      커스텀 이미지 (선택)
-                    </label>
-                    <div className="max-w-[120px]">
-                      <ImageUploader
-                        currentImageUrl={asset?.imageUrl}
-                        uploadState={uploadState}
-                        onFileSelect={file => setPendingFile(file)}
-                        onRemove={() => setPendingFile(null)}
-                        label="이미지"
-                        aspectClass="aspect-square"
-                      />
-                    </div>
-                    {hasImage && !pendingFile && (
-                      <button
-                        onClick={() => handleRemoveImage(mbti)}
-                        className="mt-1 text-red-400 text-xs hover:underline"
-                      >
-                        기존 이미지 삭제
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSave(mbti)}
-                      disabled={isSaving || uploadState.isUploading}
-                      className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition disabled:opacity-40"
-                    >
-                      {isSaving
-                        ? uploadState.isUploading
-                          ? `${uploadState.progress}%`
-                          : "저장 중..."
-                        : "저장"}
-                    </button>
-                    <button
-                      onClick={() => { setEditingId(null); resetUpload(); }}
-                      className="px-4 py-2 bg-slate-700 text-white rounded-xl font-bold text-xs transition"
-                    >
-                      취소
-                    </button>
-                  </div>
-                </div>
+        {/* 인트로 */}
+        {step === 0 && (
+          <div className="space-y-8 py-6">
+            <div className="space-y-4">
+              <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-bold px-4 py-1.5 rounded-full">
+                심리 테스트
+              </span>
+              <h1 className="text-3xl font-black text-slate-900 leading-tight">{testData.title}</h1>
+              {testData.description && (
+                <p className="text-slate-500 text-sm">{testData.description}</p>
               )}
             </div>
-          );
-        })}
+            <div className="text-7xl py-2">🧠</div>
+            <p className="text-slate-400 text-sm">{testData.questions.length}개의 질문</p>
+            <button
+              onClick={() => setStep(1)}
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg hover:bg-indigo-700 transition"
+            >
+              테스트 시작하기
+            </button>
+          </div>
+        )}
+
+        {/* 질문 */}
+        {step >= 1 && step <= totalSteps && !isLoading && (
+          <div className="space-y-8 py-6">
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+              <button onClick={handleBack} className="text-sm font-bold text-slate-400 hover:text-slate-800 px-2 py-1">
+                ← 이전
+              </button>
+              <Link href="/" className="text-sm font-bold text-slate-400 hover:text-red-500 px-2 py-1">
+                ✕ 중단
+              </Link>
+            </div>
+            <div className="space-y-4">
+              <span className="text-sm font-bold text-indigo-500">Q {step} / {totalSteps}</span>
+              <h2 className="text-2xl font-black text-slate-800 leading-snug">
+                {testData.questions[step - 1].text}
+              </h2>
+            </div>
+            <div className="space-y-4">
+              {testData.questions[step - 1].options.map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleOptionClick(opt.value)}
+                  className="w-full bg-slate-50 text-slate-700 p-5 rounded-2xl font-medium text-base text-left border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-800 transition"
+                >
+                  {opt.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 로딩 */}
+        {isLoading && (
+          <div className="space-y-8 py-16 flex flex-col items-center justify-center">
+            <div className="w-20 h-20 border-8 border-slate-100 border-t-indigo-500 rounded-full animate-spin" />
+            <p className="text-2xl font-black text-slate-800 mt-6">결과 분석 중...</p>
+          </div>
+        )}
+
+        {/* 결과 */}
+        {isResult && result && (
+          <div className="space-y-6 py-6">
+            <div className="space-y-2">
+              <span className="text-sm font-bold text-indigo-600">당신의 유형은?</span>
+              <h1 className="text-3xl font-black text-slate-900">{result.name}</h1>
+              {result.mbti && (
+                <span className="inline-block bg-indigo-50 text-indigo-700 px-3 py-1 rounded-md text-sm font-bold">
+                  {result.mbti}
+                </span>
+              )}
+            </div>
+
+            {/* 결과 이미지 - 없으면 기본 이모지 표시 */}
+            <div className="w-48 h-48 mx-auto rounded-2xl overflow-hidden border-4 border-slate-100 shadow-inner flex items-center justify-center bg-indigo-50">
+              {result.imageUrl ? (
+                <img
+                  src={result.imageUrl}
+                  alt={result.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                    (e.currentTarget.nextSibling as HTMLElement).style.display = "flex";
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-full h-full items-center justify-center text-6xl ${result.imageUrl ? "hidden" : "flex"}`}
+              >
+                🎯
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-left">
+              <p className="text-slate-700 leading-relaxed break-keep">{result.description}</p>
+            </div>
+
+            {/* 궁합 표시 */}
+            {(result.bestMbti || result.oppositeMbti) && (
+              <div className="grid grid-cols-2 gap-3">
+                {result.bestMbti && (
+                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-left">
+                    <p className="text-xs font-black text-emerald-600 mb-1">💚 잘 맞는 유형</p>
+                    <p className="font-black text-emerald-800 text-base">{result.bestMbti}</p>
+                  </div>
+                )}
+                {result.oppositeMbti && (
+                  <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-left">
+                    <p className="text-xs font-black text-red-500 mb-1">🔴 반대 유형</p>
+                    <p className="font-black text-red-800 text-base">{result.oppositeMbti}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => { setStep(0); setAnswers([]); setResult(null); }}
+                className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-900 transition"
+              >
+                다시하기
+              </button>
+              <Link href="/" className="w-full bg-slate-100 text-slate-800 py-4 rounded-xl font-bold hover:bg-slate-200 transition block">
+                메인으로
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
