@@ -57,10 +57,10 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {/* 스텔라 잔액 (로그인 시) */}
             {user && (
-              <a href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
+              <Link href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
                 <img src="/stella.png" className="w-4 h-4" alt="stella" />
                 <span className="text-sm font-black">{profile?.stella ?? 0}</span>
-              </a>
+              </Link>
             )}
 
             {/* 햄버거 메뉴 */}
@@ -425,10 +425,10 @@ export default function Home() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-slate-700 truncate">{user.displayName}님</p>
-                    <a href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
+                    <Link href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
                 <img src="/stella.png" className="w-4 h-4" alt="stella" />
                 <span className="text-sm font-black">{profile?.stella ?? 0}</span>
-              </a>
+              </Link>
                   </div>
                   <button onClick={logout} className="w-full p-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition">
                     로그아웃
