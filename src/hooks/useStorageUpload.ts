@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebase";
 
-interface UploadState {
+export interface UploadState {
   progress: number;
   isUploading: boolean;
   error: string | null;
