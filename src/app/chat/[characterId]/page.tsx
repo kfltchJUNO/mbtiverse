@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection, doc, query, orderBy, onSnapshot,
-  addDoc, serverTimestamp, getDoc, getDocs, where, limit,
+  addDoc, serverTimestamp, getDoc, getDocs, setDoc, where, limit,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -53,6 +53,10 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const [isSending, setIsSending] = useState(false);
   const [dailyCount, setDailyCount] = useState(0);
   const [totalMsgCount, setTotalMsgCount] = useState(0);
+  const [userGender, setUserGender] = useState<'male'|'female'|''>('');
+  const [showGenderModal, setShowGenderModal] = useState(false);
+  const [prevSummary, setPrevSummary] = useState('');
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
 
   // 사진 요청 모달 상태
   const [showPhotoModal, setShowPhotoModal] = useState(false);

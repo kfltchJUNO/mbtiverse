@@ -14,7 +14,7 @@ const MODELS = [
 
 export async function POST(req: Request) {
   try {
-    const { characterId, messages, userId } = await req.json();
+    const { characterId, messages, userId, userGender, prevSummary } = await req.json();
 
     if (!characterId || !messages || !userId) {
       return NextResponse.json({ success: false, error: "필수 파라미터가 없습니다." }, { status: 400 });
@@ -40,9 +40,14 @@ export async function POST(req: Request) {
 
     for (const modelName of MODELS) {
       try {
+        // 성별 및 이전 요약 컨텍스트 주입
+        const genderCtx = userGender ? `\n\n[상대방 정보]\n성별: ${userGender === 'female' ? '여성' : userGender === 'male' ? '남성' : '미설정'}` : '';
+        const summaryCtx = prevSummary ? `\n\n[이전 대화 요약]\n${prevSummary}\n\n이 내용을 기억하고 자연스럽게 이어서 대화해.` : '';
+        const fullPrompt = character.systemPrompt.replace('{userGender}', userGender || '미설정') + genderCtx + summaryCtx;
+
         const model = genAI.getGenerativeModel({
           model: modelName,
-          systemInstruction: character.systemPrompt,
+          systemInstruction: fullPrompt,
         });
         const chat = model.startChat({ history });
         const result = await chat.sendMessage(lastMessage.content);
@@ -59,7 +64,12 @@ export async function POST(req: Request) {
       throw new Error("모든 모델 실패: " + lastError);
     }
 
-    return NextResponse.json({ success: true, reply });
+    // 마무리 키워드 감지
+    const farewellKeywords = ['잘자', '잘 자', '안녕', 'bye', '바이', '나중에봐', '들어갈게', '자야겠', '끊을게', '또봐', '굿나잇', 'good night'];
+    const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
+    const isFarewell = farewellKeywords.some(k => lastMsg.includes(k));
+
+    return NextResponse.json({ success: true, reply, isFarewell });
   } catch (error: any) {
     console.error("Chat API Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
