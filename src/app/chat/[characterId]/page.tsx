@@ -56,9 +56,12 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const [isSavingSummary, setIsSavingSummary] = useState(false);
   const [showFarewellModal, setShowFarewellModal] = useState(false);
   const [farewellMessage, setFarewellMessage] = useState('');
+  const [pendingPhoto, setPendingPhoto] = useState<{ imageUrl: string; caption: string; id: string } | null>(null);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [photoModalUrl, setPhotoModalUrl] = useState('');
 
   // 사진 요청 모달 상태
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [showPhotoRequestModal, setShowPhotoRequestModal] = useState(false);
   const [photoRequest, setPhotoRequest] = useState("");
   const [isRequesting, setIsRequesting] = useState(false);
 
@@ -113,11 +116,10 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   };
 
 
-  // ── 자동 사진 트리거 체크 ──
+  // ── 자동 사진 트리거 체크 — 조건 충족 시 "사진 보기" 버튼 노출
   const checkAutoPhoto = async (msgCount: number) => {
-    if (!roomId || !user) return;
+    if (!user) return;
     try {
-      // 활성화된 자동 사진 중 현재 메시지 수 이하인 것 조회
       const q = query(
         collection(db, "auto_photos", characterId, "items"),
         where("isActive", "==", true),
@@ -128,24 +130,19 @@ export default function ChatPage({ params }: { params: { characterId: string } }
       const snap = await getDocs(q);
       if (snap.empty) return;
 
-      const autoPhoto = snap.docs[0].data();
+      const photoDoc = snap.docs[0];
+      const autoPhoto = photoDoc.data();
 
-      // 이미 이 트리거로 보낸 적 있는지 체크 (중복 방지)
-      const sentKey = `auto_photo_sent_${roomId}_${snap.docs[0].id}`;
-      if (localStorage.getItem(sentKey)) return;
+      // 이미 이 사진을 열어봤으면 스킵
+      const seenKey = `auto_photo_seen_${characterId}_${photoDoc.id}`;
+      if (localStorage.getItem(seenKey)) return;
 
-      // 채팅방에 자동 사진 전송
-      await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
-        role: "assistant",
-        type: "image",
+      // 버튼 노출 (채팅 메시지 X)
+      setPendingPhoto({
         imageUrl: autoPhoto.imageUrl,
-        content: autoPhoto.caption,
-        characterId,
-        isAutoPhoto: true,
-        createdAt: serverTimestamp(),
+        caption: autoPhoto.caption || "",
+        id: photoDoc.id,
       });
-
-      localStorage.setItem(sentKey, "1");
     } catch (err) {
       console.error("자동 사진 트리거 오류:", err);
     }
@@ -265,7 +262,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           });
         }
         setPhotoRequest("");
-        setShowPhotoModal(false);
+        setShowPhotoRequestModal(false);
         alert("사진 요청이 접수되었습니다! 운영자가 확인 후 전달드립니다.");
       } else {
         alert("요청 실패: " + data.error);
@@ -314,7 +311,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
 
         {/* 사진 요청 버튼 */}
         <button
-          onClick={() => setShowPhotoModal(true)}
+          onClick={() => setShowPhotoRequestModal(true)}
           className="ml-auto flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition"
         >
           📸 <span>사진 요청</span>
@@ -350,11 +347,22 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             >
               {msg.type === "image" && msg.imageUrl ? (
                 <div>
-                  <img
-                    src={msg.imageUrl}
-                    alt="캐릭터 사진"
-                    className="rounded-xl max-w-full mb-2 border border-slate-100"
-                  />
+                  <div
+                    className="relative rounded-xl overflow-hidden mb-2 border border-slate-100 select-none"
+                    style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+                    onContextMenu={e => e.preventDefault()}
+                  >
+                    <img
+                      src={msg.imageUrl}
+                      alt="캐릭터 사진"
+                      className="w-full block pointer-events-none"
+                      draggable={false}
+                      onContextMenu={e => e.preventDefault()}
+                      style={{ WebkitTouchCallout: 'none' }}
+                    />
+                    {/* 투명 오버레이 — 길게누르기/드래그 방지 */}
+                    <div className="absolute inset-0" onContextMenu={e=>e.preventDefault()} />
+                  </div>
                   {msg.content && <p>{msg.content}</p>}
                 </div>
               ) : (
@@ -380,6 +388,65 @@ export default function ChatPage({ params }: { params: { characterId: string } }
         )}
         <div ref={bottomRef} />
       </main>
+
+      {/* ── 자동 사진 알림 버튼 ── */}
+      {pendingPhoto && (
+        <div className="sticky bottom-[72px] z-30 flex justify-center px-4 pointer-events-none">
+          <button
+            className="pointer-events-auto flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full shadow-lg font-bold text-sm animate-bounce"
+            onClick={() => {
+              setPhotoModalUrl(pendingPhoto.imageUrl);
+              setShowPhotoModal(true);
+              // 열어봤다고 표시
+              localStorage.setItem(`auto_photo_seen_${characterId}_${pendingPhoto.id}`, "1");
+              setPendingPhoto(null);
+            }}
+          >
+            📸 {character?.name}이(가) 사진을 보냈어요!
+          </button>
+        </div>
+      )}
+
+      {/* ── 사진 모달 ── */}
+      {showPhotoModal && photoModalUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center"
+          onClick={() => setShowPhotoRequestModal(false)}
+        >
+          {/* 닫기 */}
+          <button className="absolute top-5 right-5 text-white text-2xl font-bold z-10">✕</button>
+
+          {/* 사진 — 하단 일부 잘림 효과 (제미나이 생성 암시) */}
+          <div
+            className="relative w-full max-w-sm mx-4 select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+            onContextMenu={e => e.preventDefault()}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl"
+              style={{ maxHeight: '72vh' }}>
+              <img
+                src={photoModalUrl}
+                alt="캐릭터 사진"
+                className="w-full object-cover block pointer-events-none"
+                draggable={false}
+                onContextMenu={e => e.preventDefault()}
+                style={{ WebkitTouchCallout: 'none' }}
+              />
+              {/* 하단 그라데이션 페이드 아웃 */}
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/80 to-transparent" />
+              {/* 하단 텍스트 */}
+              <div className="absolute bottom-4 left-0 right-0 text-center">
+                <p className="text-white/80 text-xs">✨ AI가 상상한 {character?.name}의 모습이에요</p>
+              </div>
+            </div>
+            {/* 투명 드래그 방지 오버레이 */}
+            <div className="absolute inset-0 rounded-3xl" onContextMenu={e => e.preventDefault()} />
+          </div>
+
+          <p className="text-white/50 text-xs mt-4">화면을 탭하면 닫혀요</p>
+        </div>
+      )}
 
       {/* ── 입력 영역 ── */}
       <footer className="sticky bottom-0 bg-white border-t border-slate-200 p-3 max-w-2xl mx-auto w-full">
@@ -409,12 +476,12 @@ export default function ChatPage({ params }: { params: { characterId: string } }
       </footer>
 
       {/* ── 사진 요청 모달 ── */}
-      {showPhotoModal && (
+      {showPhotoRequestModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-slate-800 text-lg">📸 {character?.name}에게 사진 요청</h3>
-              <button onClick={() => setShowPhotoModal(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">×</button>
+              <button onClick={() => setShowPhotoRequestModal(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">×</button>
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800">
@@ -432,7 +499,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
 
             <div className="flex gap-3 mt-4">
               <button
-                onClick={() => setShowPhotoModal(false)}
+                onClick={() => setShowPhotoRequestModal(false)}
                 className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition"
               >
                 취소
