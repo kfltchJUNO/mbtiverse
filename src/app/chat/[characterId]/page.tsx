@@ -188,20 +188,26 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   // ── 메시지 전송 ──
   const handleSend = async () => {
     if (!input.trim() || isSending || !user || !roomId) return;
-    if (!canSend()) {
-      // 무료 소진 → 스텔라로 차감
-      if ((profile?.stella || 0) < stellaPerMessage) {
+
+    // 무료 소진 여부 확인
+    const freeLeft = getFreeSlotsLeft();
+    if (!isAdmin && freeLeft <= 0) {
+      // 스텔라 잔액 체크
+      const currentStella = profile?.stella || 0;
+      if (currentStella < stellaPerMessage) {
         setShowNoStellaModal(true);
         return;
       }
-      // 스텔라 차감
+      // 스텔라 즉시 차감 (Firestore 직접)
       try {
         const { doc: fsDoc, updateDoc, increment } = await import('firebase/firestore');
         await updateDoc(fsDoc(db, 'users', user.uid), {
           stella: increment(-stellaPerMessage),
         });
-      } catch (e) {
+        console.log(`스텔라 차감: -${stellaPerMessage} (잔액: ${currentStella - stellaPerMessage})`);
+      } catch (e: any) {
         console.error('스텔라 차감 실패:', e);
+        alert('스텔라 차감 중 오류가 발생했습니다: ' + e.message);
         return;
       }
     }
@@ -222,10 +228,11 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     });
 
     // 일일 카운트 업데이트
-    const todayKey = `chat_daily_${user?.uid}_${new Date().toDateString()}`; // 전체 통합
+    const todayKey = `chat_daily_${user.uid}_${new Date().toDateString()}`;
     const newCount = dailyCount + 1;
     setDailyCount(newCount);
     localStorage.setItem(todayKey, String(newCount));
+    console.log(`일일 카운트: ${newCount}/${FREE_DAILY_MESSAGES} (key: ${todayKey})`);
     const newTotal = totalMsgCount + 1;
     setTotalMsgCount(newTotal);
     // 자동 사진 트리거 체크
