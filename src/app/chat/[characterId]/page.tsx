@@ -94,12 +94,12 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     return () => unsubscribe();
   }, [roomId]);
 
-  // ── 오늘 대화 수 로드 ──
+  // ── 오늘 대화 수 로드 (전체 통합) ──
   useEffect(() => {
-    if (!roomId) return;
-    const key = `chat_daily_${roomId}_${new Date().toDateString()}`;
+    if (!user) return;
+    const key = `chat_daily_${user.uid}_${new Date().toDateString()}`;
     setDailyCount(Number(localStorage.getItem(key) || "0"));
-  }, [roomId]);
+  }, [user]);
 
   // ── 스크롤 자동 이동 ──
   useEffect(() => {
