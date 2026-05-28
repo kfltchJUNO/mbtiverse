@@ -1,160 +1,211 @@
-// src/app/stella/page.tsx
+// src/app/admin/stella/page.tsx
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import {
+  collection, doc, getDoc, getDocs, query,
+  orderBy, where, runTransaction, serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../../lib/firebase";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
+import { useRouter } from "next/navigation";
 
-const PACKAGES = [
-  { permalink: "vbgkvx", stella: 400,  price: "$4.99",  name: "스타터",   emoji: "⚡", color: "from-blue-600 to-indigo-600",   url: "https://maedeup.gumroad.com/l/vbgkvx" },
-  { permalink: "wbomlk", stella: 900,  price: "$9.99",  name: "스탠다드", emoji: "🌟", color: "from-violet-600 to-purple-600", url: "https://maedeup.gumroad.com/l/wbomlk" },
-  { permalink: "sreanm", stella: 2000, price: "$19.99", name: "프리미엄", emoji: "💫", color: "from-pink-600 to-rose-600",     url: "https://maedeup.gumroad.com/l/sreanm" },
-  { permalink: "ybjbje", stella: 4500, price: "$39.99", name: "VIP",     emoji: "👑", color: "from-amber-500 to-orange-500",  url: "https://maedeup.gumroad.com/l/ybjbje" },
-];
-
-export default function StellaPage() {
-  const { user, profile, loading } = useAuthGuard();
+export default function AdminStellaPage() {
+  const { user, isAdmin, loading } = useAuthGuard();
   const router = useRouter();
-  const [showManual, setShowManual] = useState(false);
-  const [licenseKey, setLicenseKey] = useState("");
-  const [isValidating, setIsValidating] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const handleValidate = async () => {
-    if (!licenseKey.trim()) return alert("라이선스 키를 입력해주세요.");
-    if (!user) return alert("로그인이 필요합니다.");
-    setIsValidating(true);
-    setResult(null);
-    try {
-      const res = await fetch("/api/license/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey: licenseKey.trim(), uid: user.uid }),
-      });
-      const data = await res.json();
-      setResult({ success: data.success, message: data.message || data.error });
-      if (data.success) {
-        setLicenseKey("");
-        setTimeout(() => router.back(), 2000);
-      }
-    } catch (e: any) {
-      setResult({ success: false, message: e.message });
+  const [searchEmail, setSearchEmail] = useState("");
+  const [foundUser, setFoundUser] = useState<any>(null);
+  const [stellaAmount, setStellaAmount] = useState(100);
+  const [stellaNote, setStellaNote] = useState("");
+  const [isGranting, setIsGranting] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [grantLog, setGrantLog] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!loading && (!user || !isAdmin)) {
+      router.push("/");
     }
-    setIsValidating(false);
+  }, [loading, user, isAdmin, router]);
+
+  useEffect(() => {
+    if (isAdmin) fetchGrantLog();
+  }, [isAdmin]);
+
+  const fetchGrantLog = async () => {
+    try {
+      const q = query(collection(db, "stella_grants"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      setGrantLog(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {}
+  };
+
+  const handleSearchUser = async () => {
+    if (!searchEmail.trim()) return alert("이메일을 입력해주세요.");
+    setIsSearching(true);
+    setFoundUser(null);
+    try {
+      const q = query(
+        collection(db, "users"),
+        where("email", "==", searchEmail.trim().toLowerCase())
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        setFoundUser({ id: d.id, ...d.data() });
+      } else {
+        alert("해당 이메일로 가입된 유저를 찾을 수 없습니다.");
+      }
+    } catch (err: any) {
+      alert("검색 오류: " + err.message);
+    }
+    setIsSearching(false);
+  };
+
+  const handleGrantStella = async () => {
+    if (!foundUser) return alert("유저를 먼저 검색해주세요.");
+    if (stellaAmount <= 0) return alert("지급량은 1 이상이어야 합니다.");
+    if (!confirm(`${foundUser.email}님에게 ${stellaAmount} 스텔라를 지급하시겠습니까?`)) return;
+
+    setIsGranting(true);
+    try {
+      const userRef = doc(db, "users", foundUser.id);
+      await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) throw new Error("유저 문서가 존재하지 않습니다.");
+        const currentStella = userSnap.data().stella || 0;
+        const newStella = currentStella + stellaAmount;
+        transaction.update(userRef, { stella: newStella });
+        const logRef = doc(collection(db, "stella_grants"));
+        transaction.set(logRef, {
+          targetUid: foundUser.id,
+          targetEmail: foundUser.email,
+          targetName: foundUser.displayName || "",
+          amount: stellaAmount,
+          note: stellaNote || "관리자 지급",
+          balanceBefore: currentStella,
+          balanceAfter: newStella,
+          createdAt: serverTimestamp(),
+        });
+      });
+      alert(`✅ ${stellaAmount} 스텔라 지급 완료!`);
+      const refreshed = await getDoc(userRef);
+      setFoundUser({ id: refreshed.id, ...refreshed.data() });
+      setStellaNote("");
+      fetchGrantLog();
+    } catch (err: any) {
+      alert("지급 실패: " + err.message);
+    }
+    setIsGranting(false);
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    <div className="flex items-center justify-center py-20">
+      <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <div className="max-w-lg mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto pb-12 space-y-6">
+      <h2 className="text-xl font-black text-amber-400">⭐ 스텔라 관리</h2>
 
-        {/* 헤더 */}
-        <div className="flex items-center gap-3 mb-6">
+      {/* 유저 검색 */}
+      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+        <h3 className="font-bold text-slate-200 mb-4">유저 검색 & 지급</h3>
+        <div className="flex gap-3 mb-4">
+          <input
+            type="email"
+            placeholder="유저 이메일로 검색"
+            className="flex-1 p-3 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl text-sm"
+            value={searchEmail}
+            onChange={e => setSearchEmail(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSearchUser()}
+          />
           <button
-            onClick={() => router.back()}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            onClick={handleSearchUser}
+            disabled={isSearching}
+            className="px-6 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-xl text-sm font-bold transition"
           >
-            ← 
+            {isSearching ? "검색 중..." : "검색"}
           </button>
-          <div className="flex items-center gap-2">
-            <img src="/stella.png" className="w-7 h-7" alt="stella" />
-            <h1 className="text-xl font-black">스텔라 충전</h1>
-          </div>
-          {user && (
-            <div className="ml-auto flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-full text-sm">
-              <img src="/stella.png" className="w-4 h-4" alt="stella" />
-              <span className="font-bold text-amber-400">{profile?.stella ?? 0}</span>
-              <span className="text-slate-400">보유</span>
+        </div>
+
+        {foundUser && (
+          <div className="bg-slate-900 rounded-xl p-5 border border-amber-500/30">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center font-black text-slate-900">
+                {(foundUser.email)?.[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-slate-100">{foundUser.email}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">현재 잔액</p>
+                <p className="text-2xl font-black text-amber-400">{(foundUser.stella || 0).toLocaleString()} ⭐</p>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* 충전 안내 */}
-        <div className="bg-indigo-950 border border-indigo-800 rounded-2xl p-4 mb-6 text-sm">
-          <p className="font-bold text-indigo-300 mb-1">✨ 충전 방법</p>
-          <p className="text-indigo-400 leading-relaxed">
-            아래 패키지를 구매하면 <span className="text-white font-bold">구매 즉시 자동으로</span> 스텔라가 충전돼요.
-            별도 코드 입력이 필요 없어요!
-          </p>
-        </div>
-
-        {/* 패키지 목록 */}
-        <div className="space-y-3 mb-6">
-          {PACKAGES.map(pkg => (
-            <a
-              key={pkg.permalink}
-              href={pkg.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`block bg-gradient-to-r ${pkg.color} p-px rounded-2xl`}
-            >
-              <div className="bg-slate-900 hover:bg-slate-800 rounded-2xl p-4 flex items-center gap-4 transition">
-                <span className="text-3xl flex-shrink-0">{pkg.emoji}</span>
-                <div className="flex-1">
-                  <p className="font-black text-white">{pkg.name}</p>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <img src="/stella.png" className="w-3.5 h-3.5" alt="stella" />
-                    <span className="text-amber-400 font-bold text-sm">{pkg.stella.toLocaleString()}</span>
-                    <span className="text-slate-500 text-xs">스텔라</span>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="font-black text-white text-lg">{pkg.price}</p>
-                  <p className="text-slate-400 text-xs">구매하기 →</p>
-                </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs font-bold text-slate-400 mb-1 block">지급량</label>
+                <input
+                  type="number" min={1} value={stellaAmount}
+                  onChange={e => setStellaAmount(Number(e.target.value))}
+                  className="w-full p-3 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm font-bold"
+                />
               </div>
-            </a>
-          ))}
-        </div>
-
-        {/* 자동 충전 안 됐을 때 */}
-        <button
-          onClick={() => setShowManual(!showManual)}
-          className="w-full py-3 text-slate-500 hover:text-slate-300 text-sm transition text-center"
-        >
-          구매했는데 스텔라가 안 왔나요? {showManual ? "▲" : "▼"}
-        </button>
-
-        {showManual && (
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 mt-2">
-            <h3 className="font-bold text-slate-200 mb-1 text-sm">라이선스 키 직접 입력</h3>
-            <p className="text-slate-500 text-xs mb-4">
-              구매 확인 이메일에 포함된 라이선스 키를 입력하면 수동으로 충전할 수 있어요.
-            </p>
-            <input
-              value={licenseKey}
-              onChange={e => setLicenseKey(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleValidate()}
-              placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
-              className="w-full p-3 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl text-sm font-mono focus:outline-none focus:border-indigo-500 mb-3"
-            />
-            {result && (
-              <div className={`p-3 rounded-xl text-sm mb-3 font-bold ${
-                result.success
-                  ? "bg-emerald-900/50 text-emerald-400 border border-emerald-800"
-                  : "bg-red-900/50 text-red-400 border border-red-800"
-              }`}>
-                {result.success ? "✅ " : "❌ "}{result.message}
+              <div>
+                <label className="text-xs font-bold text-slate-400 mb-1 block">사유 (선택)</label>
+                <input
+                  type="text" placeholder="예: 이벤트 보상" value={stellaNote}
+                  onChange={e => setStellaNote(e.target.value)}
+                  className="w-full p-3 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm"
+                />
               </div>
-            )}
-            <button
-              onClick={handleValidate}
-              disabled={isValidating || !licenseKey.trim()}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
-            >
-              {isValidating ? "확인 중..." : "충전하기"}
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              {[30, 100, 400, 900, 2000].map(n => (
+                <button key={n} onClick={() => setStellaAmount(n)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    stellaAmount === n ? "bg-amber-500 text-slate-900" : "bg-slate-700 text-slate-300"
+                  }`}>
+                  +{n}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={handleGrantStella} disabled={isGranting}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl font-black transition disabled:opacity-50">
+              {isGranting ? "처리 중..." : `⭐ ${stellaAmount.toLocaleString()} 스텔라 지급하기`}
             </button>
           </div>
         )}
+      </div>
 
-        <p className="text-center text-slate-600 text-xs mt-6">
-          문의: ot.helper7@gmail.com
-        </p>
+      {/* 지급 로그 */}
+      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+        <h3 className="font-bold text-slate-300 mb-4">최근 지급 내역 ({grantLog.length}건)</h3>
+        {grantLog.length === 0 ? (
+          <p className="text-slate-500 text-sm text-center py-8">지급 내역이 없습니다.</p>
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {grantLog.map(log => (
+              <div key={log.id} className="flex items-center justify-between bg-slate-900 px-4 py-3 rounded-xl text-sm">
+                <div>
+                  <span className="font-bold text-slate-200">{log.targetName || log.targetEmail}</span>
+                  <span className="text-slate-500 text-xs ml-2">{log.note}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-amber-400 font-black">+{log.amount} ⭐</span>
+                  <p className="text-slate-500 text-xs">
+                    {log.createdAt?.toDate?.()?.toLocaleDateString("ko-KR") || ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

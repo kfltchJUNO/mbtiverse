@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection, doc, query, orderBy, onSnapshot,
-  addDoc, serverTimestamp, getDoc, getDocs, setDoc, where, limit,
+  addDoc, serverTimestamp, getDoc, getDocs, deleteDoc, setDoc, where, limit,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
@@ -77,6 +77,32 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     }
   }, [loading, user, router]);
 
+  // ── 채팅방 입장 시 기존 메시지 삭제 + 사진 seen 초기화 ──
+  useEffect(() => {
+    if (!roomId || !user) return;
+
+    const clearRoom = async () => {
+      try {
+        const messagesRef = collection(db, "chat_rooms", roomId, "messages");
+        const snap = await getDocs(messagesRef);
+        const deleteOps = snap.docs.map(d => deleteDoc(doc(db, "chat_rooms", roomId, "messages", d.id)));
+        await Promise.all(deleteOps);
+
+        // 사진 seen 키 초기화 (새 대화 시 다시 받을 수 있게)
+        Object.keys(localStorage)
+          .filter(k => k.startsWith(`auto_photo_seen_${characterId}_`))
+          .forEach(k => localStorage.removeItem(k));
+
+        // 현재 세션 채팅 횟수 초기화
+        localStorage.removeItem(`chat_session_${roomId}`);
+      } catch (e) {
+        console.error("방 초기화 오류:", e);
+      }
+    };
+
+    clearRoom();
+  }, [roomId, user]);
+
   // ── 채팅 메시지 실시간 구독 ──
   useEffect(() => {
     if (!roomId) return;
@@ -117,33 +143,43 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   };
 
 
-  // ── 자동 사진 트리거 체크 — 조건 충족 시 "사진 보기" 버튼 노출
-  const checkAutoPhoto = async (msgCount: number) => {
+  // ── 자동 사진 트리거 체크 ──
+  // triggerCount는 "설정 이후 기준" — 사진의 createdAt보다 나중에 보낸 메시지 수로 계산
+  const checkAutoPhoto = async (sessionCount: number) => {
     if (!user) return;
     try {
+      // 모든 활성 자동 사진 조회
       const q = query(
         collection(db, "auto_photos", characterId, "items"),
         where("isActive", "==", true),
-        where("triggerCount", "<=", msgCount),
-        orderBy("triggerCount", "desc"),
-        limit(1)
+        orderBy("triggerCount", "asc")
       );
       const snap = await getDocs(q);
       if (snap.empty) return;
 
-      const photoDoc = snap.docs[0];
-      const autoPhoto = photoDoc.data();
+      for (const photoDoc of snap.docs) {
+        const autoPhoto = photoDoc.data();
 
-      // 이미 이 사진을 열어봤으면 스킵
-      const seenKey = `auto_photo_seen_${characterId}_${photoDoc.id}`;
-      if (localStorage.getItem(seenKey)) return;
+        // 이미 열어봤으면 스킵
+        const seenKey = `auto_photo_seen_${characterId}_${photoDoc.id}`;
+        if (localStorage.getItem(seenKey)) continue;
 
-      // 버튼 노출 (채팅 메시지 X)
-      setPendingPhoto({
-        imageUrl: autoPhoto.imageUrl,
-        caption: autoPhoto.caption || "",
-        id: photoDoc.id,
-      });
+        // 이 사진이 설정된 시각 이후의 세션 메시지 수 계산
+        const photoCreatedAt = autoPhoto.createdAt?.toDate?.() || new Date(0);
+        const sessionCountAfterPhoto = messages.filter(m =>
+          m.role === "user" &&
+          m.createdAt?.toDate?.() > photoCreatedAt
+        ).length + (sessionCount > 0 ? 1 : 0);
+
+        if (sessionCountAfterPhoto >= autoPhoto.triggerCount) {
+          setPendingPhoto({
+            imageUrl: autoPhoto.imageUrl,
+            caption: autoPhoto.caption || "",
+            id: photoDoc.id,
+          });
+          break; // 한 번에 하나씩만 노출
+        }
+      }
     } catch (err) {
       console.error("자동 사진 트리거 오류:", err);
     }
