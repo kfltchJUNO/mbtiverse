@@ -8,28 +8,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
+import { CHARACTERS } from "../../../lib/characters";
 
 // ─────────────────────────────────────────────
-// 캐릭터 메타데이터 (UI 표시용)
+// 캐릭터 메타데이터 → characters.ts에서 직접 참조
 // ─────────────────────────────────────────────
-const CHARACTER_META: Record<string, { name: string; emoji: string; color: string; bgColor: string }> = {
-  ENFJ: { name: "지우", emoji: "🌟", color: "text-orange-600", bgColor: "bg-orange-50 border-orange-200" },
-  ENFP: { name: "하람", emoji: "✨", color: "text-yellow-600", bgColor: "bg-yellow-50 border-yellow-200" },
-  ENTJ: { name: "준혁", emoji: "🔥", color: "text-red-600", bgColor: "bg-red-50 border-red-200" },
-  ENTP: { name: "도현", emoji: "💡", color: "text-blue-600", bgColor: "bg-blue-50 border-blue-200" },
-  ESFJ: { name: "수현", emoji: "🌸", color: "text-pink-600", bgColor: "bg-pink-50 border-pink-200" },
-  ESFP: { name: "예린", emoji: "💃", color: "text-fuchsia-600", bgColor: "bg-fuchsia-50 border-fuchsia-200" },
-  ESTJ: { name: "민준", emoji: "🏆", color: "text-slate-700", bgColor: "bg-slate-100 border-slate-300" },
-  ESTP: { name: "재원", emoji: "⚡", color: "text-amber-600", bgColor: "bg-amber-50 border-amber-200" },
-  INFJ: { name: "서아", emoji: "🔮", color: "text-purple-600", bgColor: "bg-purple-50 border-purple-200" },
-  INFP: { name: "윤아", emoji: "🌙", color: "text-indigo-600", bgColor: "bg-indigo-50 border-indigo-200" },
-  INTJ: { name: "현우", emoji: "🧠", color: "text-cyan-700", bgColor: "bg-cyan-50 border-cyan-200" },
-  INTP: { name: "태양", emoji: "🔭", color: "text-teal-600", bgColor: "bg-teal-50 border-teal-200" },
-  ISFJ: { name: "다은", emoji: "🍀", color: "text-green-600", bgColor: "bg-green-50 border-green-200" },
-  ISFP: { name: "민서", emoji: "🎨", color: "text-rose-600", bgColor: "bg-rose-50 border-rose-200" },
-  ISTJ: { name: "성호", emoji: "📋", color: "text-zinc-700", bgColor: "bg-zinc-100 border-zinc-300" },
-  ISTP: { name: "강혁", emoji: "🔧", color: "text-stone-600", bgColor: "bg-stone-100 border-stone-300" },
-};
 
 interface Message {
   id?: string;
@@ -40,13 +23,27 @@ interface Message {
   createdAt?: any;
 }
 
+// 받침 유무에 따른 조사 반환
+const withJosa = (name: string, josa: "와/과" | "이/가" | "을/를" | "은/는") => {
+  if (!name) return name;
+  const last = name.charCodeAt(name.length - 1);
+  const hasBatchim = (last - 0xAC00) % 28 !== 0;
+  const map: Record<string, [string, string]> = {
+    "와/과": ["과", "와"],
+    "이/가": ["이", "가"],
+    "을/를": ["을", "를"],
+    "은/는": ["은", "는"],
+  };
+  return name + (hasBatchim ? map[josa][0] : map[josa][1]);
+};
+
 const FREE_DAILY_MESSAGES = 5; // 하루 무료 메시지 수
 
 export default function ChatPage({ params }: { params: { characterId: string } }) {
   const router = useRouter();
   const { user, profile, loading, isAdmin } = useAuthGuard();
   const characterId = params.characterId.toUpperCase();
-  const meta = CHARACTER_META[characterId];
+  const character = CHARACTERS[characterId];
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -286,7 +283,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     );
   }
 
-  if (!meta) {
+  if (!character) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <p className="text-slate-500">존재하지 않는 캐릭터입니다.</p>
@@ -301,12 +298,12 @@ export default function ChatPage({ params }: { params: { characterId: string } }
         <button onClick={() => router.back()} className="text-slate-500 hover:text-slate-800 font-bold text-lg">
           ←
         </button>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 ${meta.bgColor}`}>
-          {meta.emoji}
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 ${character?.gradient}`}>
+          {character?.emoji}
         </div>
         <div>
-          <h1 className={`font-black text-base ${meta.color}`}>
-            {meta.name} <span className="text-xs text-slate-400 font-normal">{characterId}</span>
+          <h1 className={`font-black text-base ${character?.accentColor}`}>
+            {character?.name} <span className="text-xs text-slate-400 font-normal">{characterId}</span>
           </h1>
           <p className="text-xs text-slate-400">
             {isAdmin ? "👑 관리자 모드 · 무제한" : `무료 ${getFreeSlotsLeft()}/${FREE_DAILY_MESSAGES}회 남음 · 잔액 ${profile?.stella || 0} ⭐`}
@@ -326,9 +323,9 @@ export default function ChatPage({ params }: { params: { characterId: string } }
       {/* ── 메시지 영역 ── */}
       <main className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full">
         {messages.length === 0 && (
-          <div className={`text-center p-8 rounded-2xl border ${meta.bgColor} mt-8`}>
-            <div className="text-4xl mb-3">{meta.emoji}</div>
-            <p className={`font-black text-lg ${meta.color}`}>{meta.name}와 대화를 시작해보세요!</p>
+          <div className={`text-center p-8 rounded-2xl border ${character?.gradient} mt-8`}>
+            <div className="text-4xl mb-3">{character?.emoji}</div>
+            <p className={`font-black text-lg ${character?.accentColor}`}>{withJosa(character?.name ?? '', '와/과')} 대화를 시작해보세요!</p>
             <p className="text-xs text-slate-500 mt-2">
               매일 {FREE_DAILY_MESSAGES}회 무료 · 이후 {stellaPerMessage}⭐/회
             </p>
@@ -338,8 +335,8 @@ export default function ChatPage({ params }: { params: { characterId: string } }
         {messages.map((msg, idx) => (
           <div key={msg.id || idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${meta.bgColor} flex-shrink-0`}>
-                {meta.emoji}
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${character?.gradient} flex-shrink-0`}>
+                {character?.emoji}
               </div>
             )}
             <div
@@ -367,8 +364,8 @@ export default function ChatPage({ params }: { params: { characterId: string } }
 
         {isSending && (
           <div className="flex justify-start">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${meta.bgColor}`}>
-              {meta.emoji}
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-2 border ${character?.gradient}`}>
+              {character?.emoji}
             </div>
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
               <div className="flex gap-1">
@@ -395,7 +392,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={`${meta.name}에게 메시지 보내기...`}
+            placeholder={`${character?.name}에게 메시지 보내기...`}
             className="flex-1 px-4 py-3 bg-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-300"
             disabled={isSending}
           />
@@ -414,7 +411,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-black text-slate-800 text-lg">📸 {meta.name}에게 사진 요청</h3>
+              <h3 className="font-black text-slate-800 text-lg">📸 {character?.name}에게 사진 요청</h3>
               <button onClick={() => setShowPhotoModal(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">×</button>
             </div>
 
