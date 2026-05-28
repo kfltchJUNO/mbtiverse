@@ -153,11 +153,21 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const handleSend = async () => {
     if (!input.trim() || isSending || !user || !roomId) return;
     if (!canSend()) {
+      // 무료 소진 → 스텔라로 차감
       if ((profile?.stella || 0) < stellaPerMessage) {
         setShowNoStellaModal(true);
         return;
       }
-      // 스텔라 차감은 기존 로직 유지
+      // 스텔라 차감
+      try {
+        const { doc: fsDoc, updateDoc, increment } = await import('firebase/firestore');
+        await updateDoc(fsDoc(db, 'users', user.uid), {
+          stella: increment(-stellaPerMessage),
+        });
+      } catch (e) {
+        console.error('스텔라 차감 실패:', e);
+        return;
+      }
     }
 
     const userMessage: Message = {

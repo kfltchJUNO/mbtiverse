@@ -2,90 +2,97 @@
 
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut, User } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, googleProvider, db } from "../lib/firebase";
+import {
+  doc, onSnapshot, setDoc, getDoc,
+  updateDoc, increment, serverTimestamp,
+  collection, query, where, getDocs,
+} from "firebase/firestore";
 
-export const ADMIN_EMAIL =
-  process.env.NEXT_PUBLIC_ADMIN_EMAIL || "ot.helper7@gmail.com";
+export const ADMIN_EMAIL = "ot.helper7@gmail.com";
 
-export interface UserProfile {
-  uid: string;
-  email: string;
-  displayName: string;
+interface UserProfile {
   stella: number;
-  role: "user" | "admin";
-  createdAt: any;
+  email: string;
+  role?: string;
 }
 
 export function useAuthGuard() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  // authLoading: Firebase Auth 상태 확인 완료 여부
-  const [authLoading, setAuthLoading] = useState(true);
-  // profileLoading: Firestore 프로필 로드 완료 여부 (어드민 체크엔 불필요)
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
 
   useEffect(() => {
-    const checkInAppBrowser = () => {
-      const userAgent = navigator.userAgent.toLowerCase();
-      const targetUrl = window.location.href;
-      if (userAgent.match(/kakaotalk/i)) {
-        setIsInAppBrowser(true);
-        window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(targetUrl)}`;
-      } else if (
-        userAgent.match(/naver/i) ||
-        userAgent.match(/instagram/i) ||
-        userAgent.match(/facebook/i)
-      ) {
-        setIsInAppBrowser(true);
-        if (userAgent.match(/android/i)) {
-          window.location.href = `intent://${targetUrl.replace(/https?:\/\//i, "")}#Intent;scheme=https;package=com.android.chrome;end`;
-        }
+    // 인앱 브라우저 체크
+    const ua = navigator.userAgent.toLowerCase();
+    const targetUrl = window.location.href;
+    if (ua.match(/kakaotalk/i)) {
+      setIsInAppBrowser(true);
+      window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(targetUrl)}`;
+    } else if (ua.match(/naver/i) || ua.match(/instagram/i) || ua.match(/facebook/i)) {
+      setIsInAppBrowser(true);
+      if (ua.match(/android/i)) {
+        window.location.href = `intent://${targetUrl.replace(/https?:\/\//i, "")}#Intent;scheme=https;package=com.android.chrome;end`;
       }
-    };
-    checkInAppBrowser();
+    }
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // ✅ Auth 상태 확정 즉시 user 세팅 + authLoading 해제
-      // admin 체크는 email 비교라 Firestore 안 기다려도 됨
+    // Firebase 인증 상태 구독
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      setAuthLoading(false);
+      setLoading(false);
 
-      // Firestore 프로필은 백그라운드에서 별도 처리
       if (currentUser) {
-        setProfileLoading(true);
-        try {
-          const userRef = doc(db, "users", currentUser.uid);
-          const userSnap = await getDoc(userRef);
+        // 유저 문서 초기화 (최초 로그인 시)
+        const userRef = doc(db, "users", currentUser.uid);
+        const snap = await getDoc(userRef);
+        if (!snap.exists()) {
+          await setDoc(userRef, {
+            email: currentUser.email,
+            stella: 0,
+            createdAt: serverTimestamp(),
+          });
+        }
 
-          if (!userSnap.exists()) {
-            const newProfile: UserProfile = {
+        // pending 스텔라 지급 체크 (구매했지만 미가입 상태였던 경우)
+        try {
+          const pendingQ = query(
+            collection(db, "gumroad_sales"),
+            where("email", "==", currentUser.email),
+            where("status", "==", "pending")
+          );
+          const pendingSnap = await getDocs(pendingQ);
+          for (const pendingDoc of pendingSnap.docs) {
+            const data = pendingDoc.data();
+            await updateDoc(userRef, { stella: increment(data.stellaAmount) });
+            await updateDoc(doc(db, "gumroad_sales", pendingDoc.id), {
+              status: "completed",
               uid: currentUser.uid,
-              email: currentUser.email || "",
-              displayName: currentUser.displayName || "익명",
-              stella: 30,
-              role: currentUser.email === ADMIN_EMAIL ? "admin" : "user",
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(userRef, newProfile);
-            setProfile(newProfile);
-          } else {
-            setProfile(userSnap.data() as UserProfile);
+            });
+            console.log(`✅ pending 스텔라 지급: +${data.stellaAmount}`);
           }
-        } catch (err) {
-          console.error("프로필 로드 실패:", err);
-        } finally {
-          setProfileLoading(false);
+        } catch (e) {
+          console.error("pending 스텔라 처리 오류:", e);
         }
       } else {
         setProfile(null);
-        setProfileLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
+
+  // profile 실시간 구독 (스텔라 잔액 즉시 반영)
+  useEffect(() => {
+    if (!user) return;
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribeProfile = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        setProfile(snap.data() as UserProfile);
+      }
+    });
+    return () => unsubscribeProfile();
+  }, [user]);
 
   const loginWithGoogle = async () => {
     try {
@@ -107,10 +114,7 @@ export function useAuthGuard() {
   return {
     user,
     profile,
-    // loading: Auth 확정 여부만 (어드민 체크에 사용)
-    loading: authLoading,
-    // profileLoading: 스텔라 잔액 등 프로필 필요한 곳에서 사용
-    profileLoading,
+    loading,
     isAdmin: user?.email === ADMIN_EMAIL,
     loginWithGoogle,
     logout,
