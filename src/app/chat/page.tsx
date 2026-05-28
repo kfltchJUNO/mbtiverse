@@ -187,20 +187,12 @@ export default function ChatSelectPage() {
         });
         setImageMap(imgs);
 
-        // 2. 대화 수 집계 (chat_rooms 컬렉션에서 유저별 메시지 수 추정)
-        // chat_rooms 문서 ID 패턴: {userId}_{characterId}
-        const chatSnap = await getDocs(collection(db, "chat_rooms"));
+        // 2. character_stats에서 직접 집계 (경량)
+        const statsSnap = await getDocs(collection(db, "character_stats"));
         const counts: Record<string, number> = {};
-        
-        for (const chatDoc of chatSnap.docs) {
-          const parts = chatDoc.id.split("_");
-          const characterId = parts[parts.length - 1]; // 마지막 파트가 MBTI 코드
-          if (characterId && characterId.length === 4) {
-            // 메시지 서브컬렉션 수 카운트
-            const msgSnap = await getDocs(collection(db, "chat_rooms", chatDoc.id, "messages"));
-            counts[characterId] = (counts[characterId] || 0) + msgSnap.size;
-          }
-        }
+        statsSnap.docs.forEach(d => {
+          counts[d.id] = d.data().messageCount || 0;
+        });
         setMessageCounts(counts);
 
         // 3. 랭킹 산출

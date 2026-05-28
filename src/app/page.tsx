@@ -62,15 +62,7 @@ export default function Home() {
                 <span className="text-sm font-black">{profile?.stella ?? 0}</span>
               </a>
             )}
-            {/* 챗봇 바로가기 (로그인 시) */}
-            {user && (
-              <button
-                onClick={() => router.push("/chat")}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-black shadow-md"
-              >
-                💬 채팅 시작
-              </button>
-            )}
+
             {/* 햄버거 메뉴 */}
             <button
               onClick={() => setMenuOpen(true)}
@@ -232,12 +224,12 @@ export default function Home() {
                 Google로 시작하기
               </button>
             )}
-            <Link
-              href="/test/fruit"
+            <button
+              onClick={() => setShowTestModal(true)}
               className="px-5 py-2.5 bg-white/20 text-white font-bold rounded-2xl text-sm border border-white/30"
             >
-              🍎 테스트 하기
-            </Link>
+              🧠 테스트 하기
+            </button>
           </div>
         </div>
       </section>

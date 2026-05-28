@@ -37,7 +37,7 @@ const withJosa = (name: string, josa: "와/과" | "이/가" | "을/를" | "은/�
   return name + (hasBatchim ? map[josa][0] : map[josa][1]);
 };
 
-const FREE_DAILY_MESSAGES = 5; // 하루 무료 메시지 수
+const FREE_DAILY_MESSAGES = 10; // 전체 통합 10회/일 // 하루 무료 메시지 수
 
 export default function ChatPage({ params }: { params: { characterId: string } }) {
   const router = useRouter();
@@ -172,14 +172,23 @@ export default function ChatPage({ params }: { params: { characterId: string } }
     });
 
     // 일일 카운트 업데이트
-    const todayKey = `chat_daily_${roomId}_${new Date().toDateString()}`;
+    const todayKey = `chat_daily_${user?.uid}_${new Date().toDateString()}`; // 전체 통합
     const newCount = dailyCount + 1;
     setDailyCount(newCount);
     localStorage.setItem(todayKey, String(newCount));
     const newTotal = totalMsgCount + 1;
     setTotalMsgCount(newTotal);
-    // 자동 사진 트리거 체크 (응답 받은 후 실행)
+    // 자동 사진 트리거 체크
     setTimeout(() => checkAutoPhoto(newTotal), 2000);
+    // 캐릭터 통계 업데이트 (랭킹용)
+    try {
+      const { doc: fsDoc, setDoc, increment, serverTimestamp } = await import('firebase/firestore');
+      const statsRef = fsDoc(db, 'character_stats', characterId.toUpperCase());
+      await setDoc(statsRef, {
+        messageCount: increment(1),
+        lastChatAt: serverTimestamp(),
+      }, { merge: true });
+    } catch {}
 
     try {
       // 최근 10개 메시지만 컨텍스트로 전송 (토큰 절약)
@@ -256,14 +265,24 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           await addDoc(collection(db, "chat_rooms", roomId, "messages"), {
             role: "assistant",
             type: "text",
-            content: `📸 사진 요청이 접수됐어! 곧 보내줄게 기대해줘 💌 (50 ⭐ 차감됨)`,
+            content: (() => {
+              const gender = character?.gender;
+              const isFormal = ['도윤','태오'].includes(character?.name || '');
+              if (isFormal) {
+                return `음... 갑자기 사진을요? 🤔 뭐, 별로 안 어색한 장면이면 나중에 생각해볼게요. 기대는 하지 마세요.`;
+              }
+              if (gender === 'male') {
+                return `사진? 갑자기 왜 😏 뭐... 딱히 싫진 않으니까. 타이밍 봐서 보내줄게.`;
+              }
+              return `사진이요? 흠, 분위기 괜찮으면 생각해볼게 😊 기다려봐요~`;
+            })(),
             characterId,
             createdAt: serverTimestamp(),
           });
         }
         setPhotoRequest("");
         setShowPhotoRequestModal(false);
-        alert("사진 요청이 접수되었습니다! 운영자가 확인 후 전달드립니다.");
+        // 채팅 메시지로 대체됨
       } else {
         alert("요청 실패: " + data.error);
       }
@@ -485,9 +504,15 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800">
-              <p className="font-bold mb-1">💡 사진 요청 안내</p>
-              <p>원하는 장면이나 분위기를 자세히 설명해주세요. 운영자가 직접 확인하고 보내드립니다.</p>
-              <p className="mt-1 font-bold">{isAdmin ? "👑 관리자 무료 요청" : `차감: 50 스텔라 (잔액: ${profile?.stella || 0})`}</p>
+              <p className="font-bold mb-1">💡 사진 요청</p>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                원하는 장면이나 분위기를 설명해주세요.<br/>
+                <span className="text-indigo-600 font-bold">{character?.name}</span>이(가) 직접 확인하고,
+                괜찮은 타이밍에 보내줄 거예요 😊
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                {isAdmin ? "👑 관리자 무료 요청" : `차감: 50 스텔라 · 잔액: ${profile?.stella || 0}`}
+              </p>
             </div>
 
             <textarea
