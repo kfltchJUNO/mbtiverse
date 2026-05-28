@@ -54,6 +54,8 @@ export default function ChatPage({ params }: { params: { characterId: string } }
   const [showGenderModal, setShowGenderModal] = useState(false);
   const [prevSummary, setPrevSummary] = useState('');
   const [isSavingSummary, setIsSavingSummary] = useState(false);
+  const [showFarewellModal, setShowFarewellModal] = useState(false);
+  const [farewellMessage, setFarewellMessage] = useState('');
 
   // 사진 요청 모달 상태
   const [showPhotoModal, setShowPhotoModal] = useState(false);

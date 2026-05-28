@@ -64,10 +64,8 @@ export async function POST(req: Request) {
       throw new Error("모든 모델 실패: " + lastError);
     }
 
-    // 마무리 키워드 감지
-    const farewellKeywords = ['잘자', '잘 자', '안녕', 'bye', '바이', '나중에봐', '들어갈게', '자야겠', '끊을게', '또봐', '굿나잇', 'good night'];
-    const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
-    const isFarewell = farewellKeywords.some(k => lastMsg.includes(k));
+    // [FAREWELL] 태그 감지 (모델이 태그 포함 응답 시)
+    const isFarewell = reply.startsWith('[FAREWELL]');
 
     return NextResponse.json({ success: true, reply, isFarewell });
   } catch (error: any) {
