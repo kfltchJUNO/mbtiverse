@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, getDocs, doc, deleteDoc,
+  collection, addDoc, getDocs, doc, deleteDoc, setDoc,
   serverTimestamp, query, orderBy, updateDoc,
 } from "firebase/firestore";
 import { db, storage } from "../../../lib/firebase";
@@ -52,6 +52,12 @@ export default function TestBuilderPage() {
   const [topic, setTopic] = useState("");
   const [choiceCount, setChoiceCount] = useState<2|3|4>(4);
   const resultCount = 16; // 항상 16개 고정
+
+  // 수정 모드
+  const [editingTest, setEditingTest] = useState<CustomTest | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editUploadingId, setEditUploadingId] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [testTitle, setTestTitle] = useState("");
   const [testDesc, setTestDesc] = useState("");
   const [testSlug, setTestSlug] = useState("");
@@ -165,6 +171,41 @@ square 1:1 ratio, 512x512px, game UI avatar style`;
     } catch (e: any) { alert("업로드 실패: " + e.message); }
     setUploadingId(null);
     resetUpload();
+  };
+
+  // 수정 모드: 이미지 업로드
+  const uploadEditImage = async (resultId: string, file: File) => {
+    if (!editingTest) return;
+    setEditUploadingId(resultId);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `test-results/${editingTest.slug}_${resultId}_${Date.now()}.${ext}`;
+      const url = await uploadFile(file, path);
+      setEditingTest(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === resultId ? { ...r, imageUrl: url } : r)
+      } : prev);
+    } catch (e: any) { alert('업로드 실패: ' + e.message); }
+    setEditUploadingId(null);
+    resetUpload();
+  };
+
+  // 수정 저장
+  const saveEdit = async () => {
+    if (!editingTest?.id) return;
+    setIsSavingEdit(true);
+    try {
+      const { id, ...data } = editingTest;
+      await updateDoc(doc(db, 'custom_tests', id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+      });
+      setTests(prev => prev.map(t => t.id === editingTest.id ? editingTest : t));
+      setShowEditModal(false);
+      setEditingTest(null);
+      alert('✅ 저장되었습니다!');
+    } catch (e: any) { alert('저장 실패: ' + e.message); }
+    setIsSavingEdit(false);
   };
 
   const publishTest = async () => {
@@ -427,6 +468,8 @@ square 1:1 ratio, 512x512px, game UI avatar style`;
                   <button onClick={()=>toggleActive(test)} className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs font-bold">
                     {test.isActive?"비활성":"활성화"}
                   </button>
+                  <button onClick={()=>{ setEditingTest({...test}); setShowEditModal(true); }}
+                    className="px-2.5 py-1 bg-indigo-800 hover:bg-indigo-700 text-indigo-300 rounded-lg text-xs font-bold">수정</button>
                   <button onClick={()=>deleteTest(test)} className="px-2.5 py-1 bg-red-900 hover:bg-red-800 text-red-400 rounded-lg text-xs font-bold">삭제</button>
                 </div>
               </div>
@@ -434,6 +477,131 @@ square 1:1 ratio, 512x512px, game UI avatar style`;
           </div>
         )}
       </div>
+
+      {/* ── 테스트 수정 모달 ── */}
+      {showEditModal && editingTest && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="min-h-screen flex items-start justify-center p-4 pt-8">
+            <div className="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-2xl shadow-2xl pb-8">
+              {/* 헤더 */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+                <div>
+                  <h3 className="font-black text-slate-100 text-lg">테스트 수정</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">{editingTest.title}</p>
+                </div>
+                <button onClick={()=>{ setShowEditModal(false); setEditingTest(null); }}
+                  className="text-slate-400 hover:text-slate-200 text-xl font-bold w-8 h-8 flex items-center justify-center">✕</button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* 기본 정보 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">제목</label>
+                    <input value={editingTest.title} onChange={e=>setEditingTest(p=>p?{...p,title:e.target.value}:p)}
+                      className="w-full p-2.5 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm focus:outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">슬러그</label>
+                    <input value={editingTest.slug} onChange={e=>setEditingTest(p=>p?{...p,slug:e.target.value}:p)}
+                      className="w-full p-2.5 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm focus:outline-none focus:border-indigo-500" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">설명</label>
+                    <input value={editingTest.description} onChange={e=>setEditingTest(p=>p?{...p,description:e.target.value}:p)}
+                      className="w-full p-2.5 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm focus:outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 mb-1.5 block">이모지</label>
+                    <input value={editingTest.emoji} onChange={e=>setEditingTest(p=>p?{...p,emoji:e.target.value}:p)}
+                      maxLength={4} className="w-full p-2.5 bg-slate-800 text-slate-100 border border-slate-600 rounded-xl text-sm text-center focus:outline-none focus:border-indigo-500" />
+                  </div>
+                </div>
+
+                {/* 결과 이미지 관리 */}
+                <div>
+                  <h4 className="font-bold text-slate-300 text-sm mb-3">🎨 결과 이미지 관리 ({editingTest.results.length}개)</h4>
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                    {editingTest.results.map(result => (
+                      <div key={result.id} className="bg-slate-800 rounded-2xl p-3 border border-slate-700">
+                        <div className="flex items-center gap-3">
+                          {/* 이미지 미리보기 */}
+                          <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-600 flex-shrink-0 flex items-center justify-center bg-slate-700">
+                            {result.imageUrl
+                              ? <img src={result.imageUrl} alt={result.name} className="w-full h-full object-cover" />
+                              : <span className="text-xl">{result.emoji||'🧠'}</span>
+                            }
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                              <p className="font-bold text-slate-200 text-xs">{result.name}</p>
+                              {result.mbti && <span className="text-[9px] bg-indigo-900 text-indigo-300 px-1.5 py-0.5 rounded-full">{result.mbti}</span>}
+                              {result.bestMbti && <span className="text-[9px] bg-emerald-900 text-emerald-400 px-1.5 py-0.5 rounded-full">♥{result.bestMbti}</span>}
+                              {result.oppositeMbti && <span className="text-[9px] bg-red-900 text-red-400 px-1.5 py-0.5 rounded-full">↔{result.oppositeMbti}</span>}
+                            </div>
+                            <p className="text-slate-500 text-[10px] line-clamp-1">{result.description}</p>
+                          </div>
+
+                          {/* 업로드/삭제 버튼 */}
+                          <div className="flex gap-1.5 flex-shrink-0">
+                            <label className="cursor-pointer">
+                              <div className="px-2.5 py-1.5 bg-indigo-800 hover:bg-indigo-700 text-indigo-300 rounded-lg text-[10px] font-bold transition whitespace-nowrap">
+                                {editUploadingId === result.id
+                                  ? `${uploadState.progress}%`
+                                  : result.imageUrl ? '변경' : '업로드'}
+                              </div>
+                              <input type="file" accept="image/*" className="hidden"
+                                disabled={!!editUploadingId}
+                                onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditImage(result.id, f); }} />
+                            </label>
+                            {result.imageUrl && (
+                              <button
+                                onClick={()=>setEditingTest(p=>p?{...p,results:p.results.map(r=>r.id===result.id?{...r,imageUrl:undefined}:r)}:p)}
+                                className="px-2 py-1.5 bg-red-900 hover:bg-red-800 text-red-400 rounded-lg text-[10px] font-bold">
+                                삭제
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 이미지 프롬프트 */}
+                        <div className="mt-2 pt-2 border-t border-slate-700 flex items-center justify-between">
+                          <p className="text-slate-600 text-[9px] font-mono flex-1 mr-2 truncate">
+                            2D character: "{result.name}" {result.mbti} kawaii flat illustration
+                          </p>
+                          <button
+                            onClick={()=>navigator.clipboard.writeText(
+                              `2D illustrated character, personality test result.\nType: "${result.name}" | MBTI: ${result.mbti||''}\nDescription: ${result.description}\nStyle: cute flat 2D illustration, pastel colors, white background, centered, kawaii, 512x512px`
+                            ).then(()=>alert('복사됨!'))}
+                            className="text-[9px] text-indigo-400 hover:text-indigo-300 flex-shrink-0">
+                            프롬프트복사
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 저장 버튼 */}
+                <div className="flex gap-3 pt-2">
+                  <button onClick={()=>{ setShowEditModal(false); setEditingTest(null); }}
+                    className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-2xl font-bold text-sm transition">
+                    취소
+                  </button>
+                  <button onClick={saveEdit} disabled={isSavingEdit}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm transition disabled:opacity-40">
+                    {isSavingEdit ? '저장 중...' : '💾 저장하기'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
