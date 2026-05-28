@@ -305,7 +305,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             {character?.name} <span className="text-xs text-slate-400 font-normal">{characterId}</span>
           </h1>
           <p className="text-xs text-slate-400">
-            {isAdmin ? "👑 관리자 모드 · 무제한" : `무료 ${getFreeSlotsLeft()}/${FREE_DAILY_MESSAGES}회 남음 · 잔액 ${profile?.stella || 0} ⭐`}
+            {isAdmin ? "👑 관리자 모드 · 무제한" : `무료 ${getFreeSlotsLeft()}/${FREE_DAILY_MESSAGES}회 남음 · 잔액 ${profile?.stella || 0}✦`}
           </p>
         </div>
 
@@ -315,7 +315,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
           className="ml-auto flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition"
         >
           📸 <span>사진 요청</span>
-          <span className="bg-indigo-500 rounded-md px-1.5 py-0.5 text-[10px]">50⭐</span>
+          <span className="bg-indigo-500 rounded-md px-1.5 py-0.5 text-[10px] flex items-center gap-0.5"><img src="/stella.png" className="w-3 h-3 inline" />50</span>
         </button>
       </header>
 
@@ -326,7 +326,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             <div className="text-4xl mb-3">{character?.emoji}</div>
             <p className={`font-black text-lg ${character?.accentColor}`}>{withJosa(character?.name ?? '', '와/과')} 대화를 시작해보세요!</p>
             <p className="text-xs text-slate-500 mt-2">
-              매일 {FREE_DAILY_MESSAGES}회 무료 · 이후 {stellaPerMessage}⭐/회
+              매일 {FREE_DAILY_MESSAGES}회 무료
             </p>
           </div>
         )}
@@ -452,7 +452,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
       <footer className="sticky bottom-0 bg-white border-t border-slate-200 p-3 max-w-2xl mx-auto w-full">
         {!isAdmin && !canSend() && (
           <div className="text-center text-xs text-amber-600 font-bold mb-2 bg-amber-50 rounded-lg p-2">
-            ⭐ 오늘 무료 대화를 모두 사용했습니다. 스텔라를 충전해주세요.
+            오늘 무료 대화를 모두 사용했습니다. 스텔라를 충전해주세요.
           </div>
         )}
         <div className="flex gap-2">
@@ -487,7 +487,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-800">
               <p className="font-bold mb-1">💡 사진 요청 안내</p>
               <p>원하는 장면이나 분위기를 자세히 설명해주세요. 운영자가 직접 확인하고 보내드립니다.</p>
-              <p className="mt-1 font-bold">{isAdmin ? "👑 관리자 무료 요청" : `차감: 50 ⭐ (현재 잔액: ${profile?.stella || 0} ⭐)`}</p>
+              <p className="mt-1 font-bold">{isAdmin ? "👑 관리자 무료 요청" : `차감: 50 스텔라 (잔액: ${profile?.stella || 0})`}</p>
             </div>
 
             <textarea
@@ -509,7 +509,7 @@ export default function ChatPage({ params }: { params: { characterId: string } }
                 disabled={isRequesting || !photoRequest.trim() || (!isAdmin && (profile?.stella || 0) < 50)}
                 className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition disabled:opacity-40"
               >
-                {isRequesting ? "요청 중..." : "50 ⭐ 차감하고 요청"}
+                {isRequesting ? "요청 중..." : "스텔라 50 차감하고 요청"}
               </button>
             </div>
           </div>

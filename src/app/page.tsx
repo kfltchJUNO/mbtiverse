@@ -57,7 +57,10 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {/* 스텔라 잔액 (로그인 시) */}
             {user && (
-              <span className="text-amber-500 text-sm font-black">{profile?.stella ?? 0} ⭐</span>
+              <a href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
+                <img src="/stella.png" className="w-4 h-4" alt="stella" />
+                <span className="text-sm font-black">{profile?.stella ?? 0}</span>
+              </a>
             )}
             {/* 챗봇 바로가기 (로그인 시) */}
             {user && (
@@ -113,7 +116,7 @@ export default function Home() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="font-bold text-slate-700 text-sm truncate">{user.displayName}님</p>
-                      <span className="text-amber-500 font-black text-sm">{profile?.stella ?? 0} ⭐</span>
+                      <span className="text-amber-500 font-black text-sm"><img src="/stella.png" className="w-4 h-4 inline-block mr-0.5 align-middle" /><span>{profile?.stella ?? 0}</span></span>
                     </div>
                     <button
                       onClick={() => { logout(); setMenuOpen(false); }}
@@ -430,7 +433,10 @@ export default function Home() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-slate-700 truncate">{user.displayName}님</p>
-                    <span className="text-amber-500 text-sm font-black">{profile?.stella ?? 0} ⭐</span>
+                    <a href="/stella" className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition">
+                <img src="/stella.png" className="w-4 h-4" alt="stella" />
+                <span className="text-sm font-black">{profile?.stella ?? 0}</span>
+              </a>
                   </div>
                   <button onClick={logout} className="w-full p-2.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition">
                     로그아웃

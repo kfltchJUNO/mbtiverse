@@ -19,3 +19,43 @@ const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 export { db, auth, storage, googleProvider };
+
+// ── 라이선스 키 검증 (Gumroad API)
+export async function validateLicenseKey(
+  licenseKey: string,
+  productPermalink: string
+): Promise<{ valid: boolean; uses?: number; error?: string }> {
+  try {
+    const res = await fetch("https://api.gumroad.com/v2/licenses/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        product_permalink: productPermalink,
+        license_key: licenseKey,
+        increment_uses_count: "false", // 검증만, 사용 횟수는 saveLicense에서
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) return { valid: false, error: data.message };
+    return { valid: true, uses: data.uses };
+  } catch (e: any) {
+    return { valid: false, error: e.message };
+  }
+}
+
+// ── 라이선스 저장 + 스텔라 충전
+export async function saveLicense(uid: string, licenseKey: string, stella: number) {
+  const {
+    doc, setDoc, updateDoc, increment, serverTimestamp,
+  } = await import("firebase/firestore");
+  await Promise.all([
+    setDoc(doc(db, "licenses", licenseKey), {
+      uid,
+      stella,
+      usedAt: serverTimestamp(),
+    }),
+    updateDoc(doc(db, "users", uid), {
+      stella: increment(stella),
+    }),
+  ]);
+}
